@@ -1,6 +1,6 @@
 # Fashion Store Distributed System
 
-Đồ án **Cơ sở dữ liệu phân tán – Đề tài 4: Quản lý chuỗi cửa hàng thời trang**.
+Đồ án **Cơ sở dữ liệu phân tán – Quản lý chuỗi cửa hàng thời trang**.
 
 ## Bộ khung trong repository
 
