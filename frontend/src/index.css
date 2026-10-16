@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #e9ece6;
+  --color-card: #fafaf6;
+  --color-ink: #15201b;
+  --color-accent: #7b2d4e;
+  --color-ok: #2f7a55;
+  --color-warn: #a66a10;
+  --color-bad: #b4352c;
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-sans: 'Figtree', system-ui, sans-serif;
+}
