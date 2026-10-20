@@ -1,0 +1,45 @@
+package com.fashionstore.backend.service;
+
+import com.fashionstore.backend.dto.request.CreateEmployeeRequest;
+import com.fashionstore.backend.dto.response.EmployeeResponse;
+import com.fashionstore.backend.entity.Employee;
+import com.fashionstore.backend.exception.AppException;
+import com.fashionstore.backend.exception.ErrorCode;
+import com.fashionstore.backend.mapper.EmployeeMapper;
+import com.fashionstore.backend.repository.BranchRepository;
+import com.fashionstore.backend.repository.EmployeeRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+
+import java.util.Locale;
+
+@Service
+@RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+public class EmployeeService {
+
+    EmployeeRepository employeeRepository;
+    BranchRepository branchRepository;
+    EmployeeMapper employeeMapper;
+
+    @Transactional
+    public EmployeeResponse create(CreateEmployeeRequest request) {
+        if (!branchRepository.existsById(request.branchId())) {
+            throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
+        }
+
+        Integer highestNumber = employeeRepository.findHighestGeneratedEmployeeNumber();
+        int nextNumber = (highestNumber == null ? 0 : highestNumber) + 1;
+        if (nextNumber > 99_999_999) {
+            throw new AppException(ErrorCode.EMPLOYEE_ID_CAPACITY_EXCEEDED);
+        }
+        String employeeId = String.format(Locale.ROOT, "NV%08d", nextNumber);
+
+        Employee employee = employeeMapper.toEntity(request, employeeId);
+        Employee savedEmployee = employeeRepository.save(employee);
+        return employeeMapper.toResponse(savedEmployee);
+    }
+}
