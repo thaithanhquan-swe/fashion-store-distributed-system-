@@ -10,11 +10,11 @@ import com.fashionstore.backend.repository.BranchRepository;
 import com.fashionstore.backend.repository.EmployeeRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
-import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -25,18 +25,13 @@ public class EmployeeService {
     BranchRepository branchRepository;
     EmployeeMapper employeeMapper;
 
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public EmployeeResponse create(CreateEmployeeRequest request) {
+        String employeeId = GeneratedId.next("NV", employeeRepository.findAllByEmployeeIdStartingWith("NV")
+                .stream().map(Employee::getEmployeeId).toList(), ErrorCode.EMPLOYEE_ID_CAPACITY_EXCEEDED);
         if (!branchRepository.existsById(request.branchId())) {
             throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
         }
-
-        Integer highestNumber = employeeRepository.findHighestGeneratedEmployeeNumber();
-        int nextNumber = (highestNumber == null ? 0 : highestNumber) + 1;
-        if (nextNumber > 99_999_999) {
-            throw new AppException(ErrorCode.EMPLOYEE_ID_CAPACITY_EXCEEDED);
-        }
-        String employeeId = String.format(Locale.ROOT, "NV%08d", nextNumber);
 
         Employee employee = employeeMapper.toEntity(request, employeeId);
         Employee savedEmployee = employeeRepository.save(employee);

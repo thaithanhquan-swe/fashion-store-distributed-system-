@@ -10,8 +10,8 @@ import com.fashionstore.backend.exception.AppException;
 import com.fashionstore.backend.exception.ErrorCode;
 import com.fashionstore.backend.mapper.ProductMapper;
 import com.fashionstore.backend.repository.ProductRepository;
+import com.fashionstore.backend.specification.ProductSpecifications;
 import java.math.BigDecimal;
-import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -19,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 @Service
 @RequiredArgsConstructor
@@ -43,9 +44,10 @@ public class ProductService {
             throw new AppException(ErrorCode.INVALID_PRODUCT_PRICE_RANGE);
         }
 
-        Page<ProductResponse> products = productRepository.search(
-                        normalize(keyword), normalize(category), normalize(brand), normalize(color),
-                        normalize(size), active, minPrice, maxPrice, pageable)
+        Page<ProductResponse> products = productRepository.findAll(
+                        ProductSpecifications.filter(normalize(keyword), normalize(category),
+                                normalize(brand), normalize(color), normalize(size),
+                                active, minPrice, maxPrice), pageable)
                 .map(productMapper::toResponse);
         return PageResponse.of(products);
     }
@@ -55,14 +57,10 @@ public class ProductService {
         return productMapper.toResponse(findProduct(productId));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public ProductResponse create(CreateProductRequest request) {
-        Integer highestNumber = productRepository.findHighestGeneratedProductNumber();
-        int nextNumber = (highestNumber == null ? 0 : highestNumber) + 1;
-        if (nextNumber > 99_999_999) {
-            throw new AppException(ErrorCode.PRODUCT_ID_CAPACITY_EXCEEDED);
-        }
-        String productId = String.format(Locale.ROOT, "SP%08d", nextNumber);
+        String productId = GeneratedId.next("SP", productRepository.findAllByProductIdStartingWith("SP")
+                .stream().map(Product::getProductId).toList(), ErrorCode.PRODUCT_ID_CAPACITY_EXCEEDED);
 
         Product product = productMapper.toEntity(request, productId);
         return productMapper.toResponse(productRepository.save(product));
