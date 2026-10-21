@@ -23,6 +23,9 @@ public enum ErrorCode {
     INVALID_PRODUCT_PRICE_RANGE(1015, "Giá tối thiểu không được lớn hơn giá tối đa", HttpStatus.BAD_REQUEST),
     PRODUCT_ID_CAPACITY_EXCEEDED(1016, "Đã vượt giới hạn tạo mã sản phẩm", HttpStatus.CONFLICT),
     INVALID_PAGE_REQUEST(1017, "Trang phải từ 0 trở lên và kích thước trang từ 1 đến 100", HttpStatus.BAD_REQUEST),
+    CUSTOMER_NOT_FOUND(1018, "Không tìm thấy khách hàng", HttpStatus.NOT_FOUND),
+    CUSTOMER_PHONE_ALREADY_EXISTS(1019, "Số điện thoại khách hàng đã tồn tại", HttpStatus.CONFLICT),
+    CUSTOMER_ID_CAPACITY_EXCEEDED(1020, "Đã vượt giới hạn tạo mã khách hàng", HttpStatus.CONFLICT),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
