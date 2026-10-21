@@ -27,13 +27,13 @@ public class AccountController {
     AccountService accountService;
 
     @PostMapping
-    @Operation(summary = "Create an employee account")
+    @Operation(summary = "Tạo tài khoản nhân viên")
     public ResponseEntity<ApiResponse<AccountResponse>> create(
             @Valid @RequestBody CreateAccountRequest request) {
         AccountResponse result = accountService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.<AccountResponse>builder()
-                        .message("Account created successfully")
+                        .message("Tạo tài khoản thành công")
                         .result(result)
                         .build());
     }

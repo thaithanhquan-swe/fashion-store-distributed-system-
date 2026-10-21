@@ -27,13 +27,13 @@ public class EmployeeController {
     EmployeeService employeeService;
 
     @PostMapping
-    @Operation(summary = "Create an employee")
+    @Operation(summary = "Tạo nhân viên")
     public ResponseEntity<ApiResponse<EmployeeResponse>> create(
             @Valid @RequestBody CreateEmployeeRequest request) {
         EmployeeResponse result = employeeService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.<EmployeeResponse>builder()
-                        .message("Employee created successfully")
+                        .message("Tạo nhân viên thành công")
                         .result(result)
                         .build());
     }
