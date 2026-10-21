@@ -15,6 +15,8 @@ public enum ErrorCode {
     EMPLOYEE_NOT_FOUND(1006, "Không tìm thấy nhân viên", HttpStatus.NOT_FOUND),
     EMPLOYEE_ID_CAPACITY_EXCEEDED(1007, "Đã vượt giới hạn tạo mã nhân viên", HttpStatus.CONFLICT),
     BRANCH_ID_CAPACITY_EXCEEDED(1008, "Đã vượt giới hạn tạo mã chi nhánh", HttpStatus.CONFLICT),
+    INVALID_CREDENTIALS(1009, "Tên đăng nhập hoặc mật khẩu không đúng", HttpStatus.UNAUTHORIZED),
+    INVALID_REFRESH_TOKEN(1010, "Refresh token không hợp lệ hoặc đã hết hạn", HttpStatus.UNAUTHORIZED),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;

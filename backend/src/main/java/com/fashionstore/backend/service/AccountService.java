@@ -1,8 +1,10 @@
 package com.fashionstore.backend.service;
 
 import com.fashionstore.backend.dto.request.CreateAccountRequest;
+import com.fashionstore.backend.dto.request.RegisterRequest;
 import com.fashionstore.backend.dto.response.AccountResponse;
 import com.fashionstore.backend.entity.Account;
+import com.fashionstore.backend.enums.Role;
 import com.fashionstore.backend.exception.AppException;
 import com.fashionstore.backend.exception.ErrorCode;
 import com.fashionstore.backend.repository.AccountRepository;
@@ -21,6 +23,14 @@ public class AccountService {
     AccountRepository accountRepository;
     EmployeeRepository employeeRepository;
     PasswordEncoder passwordEncoder;
+
+    public AccountResponse register(RegisterRequest request) {
+        return create(new CreateAccountRequest(
+                request.employeeId(),
+                request.username(),
+                request.password(),
+                Role.STAFF));
+    }
 
     public AccountResponse create(CreateAccountRequest request) {
         if (accountRepository.existsByUsername(request.username())) {
