@@ -19,6 +19,10 @@ public enum ErrorCode {
     INVALID_REFRESH_TOKEN(1010, "Refresh token không hợp lệ hoặc đã hết hạn", HttpStatus.UNAUTHORIZED),
     ACCESS_DENIED(1011, "Bạn không có quyền truy cập endpoint này", HttpStatus.FORBIDDEN),
     CURRENT_PASSWORD_INCORRECT(1012, "Mật khẩu hiện tại không đúng", HttpStatus.BAD_REQUEST),
+    PRODUCT_NOT_FOUND(1014, "Không tìm thấy sản phẩm", HttpStatus.NOT_FOUND),
+    INVALID_PRODUCT_PRICE_RANGE(1015, "Giá tối thiểu không được lớn hơn giá tối đa", HttpStatus.BAD_REQUEST),
+    PRODUCT_ID_CAPACITY_EXCEEDED(1016, "Đã vượt giới hạn tạo mã sản phẩm", HttpStatus.CONFLICT),
+    INVALID_PAGE_REQUEST(1017, "Trang phải từ 0 trở lên và kích thước trang từ 1 đến 100", HttpStatus.BAD_REQUEST),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
