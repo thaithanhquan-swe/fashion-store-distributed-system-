@@ -23,9 +23,9 @@ final class GeneratedId {
             }
             highest = Math.max(highest, Integer.parseInt(suffix));
         }
-        if (highest >= 99_999_999) {
+        if (highest >= 999) {
             throw new AppException(capacityError);
         }
-        return String.format(Locale.ROOT, "%s%08d", prefix, highest + 1);
+        return String.format(Locale.ROOT, "%s%03d", prefix, highest + 1);
     }
 }
