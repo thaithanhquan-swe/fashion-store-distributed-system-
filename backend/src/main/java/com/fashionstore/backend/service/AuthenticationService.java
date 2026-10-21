@@ -1,8 +1,8 @@
 package com.fashionstore.backend.service;
 
+import com.fashionstore.backend.dto.request.ChangePasswordRequest;
 import com.fashionstore.backend.dto.request.LoginRequest;
 import com.fashionstore.backend.dto.request.RefreshTokenRequest;
-import com.fashionstore.backend.dto.request.RegisterRequest;
 import com.fashionstore.backend.dto.response.AccountResponse;
 import com.fashionstore.backend.dto.response.LoginResponse;
 import com.fashionstore.backend.configuration.CustomJwtDecoder;
@@ -27,7 +27,6 @@ import org.springframework.stereotype.Service;
 public class AuthenticationService {
 
     private final AccountRepository accountRepository;
-    private final AccountService accountService;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final CustomJwtDecoder jwtDecoder;
@@ -36,14 +35,12 @@ public class AuthenticationService {
 
     public AuthenticationService(
             AccountRepository accountRepository,
-            AccountService accountService,
             PasswordEncoder passwordEncoder,
             JwtEncoder jwtEncoder,
             CustomJwtDecoder jwtDecoder,
             @Value("${jwt.valid-duration}") long validDuration,
             @Value("${jwt.refreshable-duration}") long refreshableDuration) {
         this.accountRepository = accountRepository;
-        this.accountService = accountService;
         this.passwordEncoder = passwordEncoder;
         this.jwtEncoder = jwtEncoder;
         this.jwtDecoder = jwtDecoder;
@@ -60,8 +57,30 @@ public class AuthenticationService {
         return issueTokenPair(account);
     }
 
-    public AccountResponse register(RegisterRequest request) {
-        return accountService.register(request);
+    public AccountResponse getCurrentAccount(String username) {
+        Account account = findAccount(username);
+        return new AccountResponse(
+                account.getAccountId(),
+                account.getEmployeeId(),
+                account.getUsername(),
+                account.getRole(),
+                account.getActive());
+    }
+
+    public void changePassword(String username, ChangePasswordRequest request) {
+        Account account = findAccount(username);
+        if (!passwordEncoder.matches(request.currentPassword(), account.getPassword())) {
+            throw new AppException(ErrorCode.CURRENT_PASSWORD_INCORRECT);
+        }
+
+        account.setPassword(passwordEncoder.encode(request.newPassword()));
+        accountRepository.save(account);
+    }
+
+    private Account findAccount(String username) {
+        return accountRepository.findByUsername(username)
+                .filter(found -> Boolean.TRUE.equals(found.getActive()))
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_CREDENTIALS));
     }
 
     public LoginResponse refreshToken(RefreshTokenRequest request) {

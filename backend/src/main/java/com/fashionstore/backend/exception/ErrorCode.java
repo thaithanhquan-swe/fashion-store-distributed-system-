@@ -17,6 +17,8 @@ public enum ErrorCode {
     BRANCH_ID_CAPACITY_EXCEEDED(1008, "Đã vượt giới hạn tạo mã chi nhánh", HttpStatus.CONFLICT),
     INVALID_CREDENTIALS(1009, "Tên đăng nhập hoặc mật khẩu không đúng", HttpStatus.UNAUTHORIZED),
     INVALID_REFRESH_TOKEN(1010, "Refresh token không hợp lệ hoặc đã hết hạn", HttpStatus.UNAUTHORIZED),
+    ACCESS_DENIED(1011, "Bạn không có quyền truy cập endpoint này", HttpStatus.FORBIDDEN),
+    CURRENT_PASSWORD_INCORRECT(1012, "Mật khẩu hiện tại không đúng", HttpStatus.BAD_REQUEST),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
