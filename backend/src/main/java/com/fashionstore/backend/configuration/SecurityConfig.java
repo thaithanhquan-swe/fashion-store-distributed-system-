@@ -24,6 +24,7 @@ public class SecurityConfig {
     CorsConfig corsConfig;
     JwtAuthenticationConfig jwtAuthenticationConfig;
     JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    ApiAccessDeniedHandler apiAccessDeniedHandler;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
@@ -31,7 +32,6 @@ public class SecurityConfig {
         httpSecurity.authorizeHttpRequests(request -> request
                 .requestMatchers(
                         HttpMethod.POST,
-                        "/auth/register",
                         "/auth/login",
                         "/auth/refresh_token")
                 .permitAll()
@@ -49,7 +49,8 @@ public class SecurityConfig {
                         .decoder(customJwtDecoder)
                         .jwtAuthenticationConverter(
                                 jwtAuthenticationConfig.jwtAuthenticationConverter()))
-                .authenticationEntryPoint(jwtAuthenticationEntryPoint));
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                .accessDeniedHandler(apiAccessDeniedHandler));
 
         // API dùng bearer token, không tạo session đăng nhập.
         httpSecurity.sessionManagement(session -> session
@@ -66,7 +67,8 @@ public class SecurityConfig {
 
         // Trả JSON 401 theo định dạng chung của API.
         httpSecurity.exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(jwtAuthenticationEntryPoint));
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                .accessDeniedHandler(apiAccessDeniedHandler));
 
         return httpSecurity.build();
     }
