@@ -1,6 +1,6 @@
 package com.fashionstore.backend.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.fashionstore.backend.dto.ApiResponse;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,9 +14,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
 
-    public JwtAuthenticationEntryPoint(ObjectMapper objectMapper) {
+    public JwtAuthenticationEntryPoint(JsonMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
