@@ -66,6 +66,13 @@ public class InventoryService {
         return listBranch(branchId, pageable);
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<InventoryResponse> getLowStock(String username, Pageable pageable) {
+        Branch branch = currentBranch(findAccount(username));
+        return PageResponse.of(inventoryRepository.findLowStock(branch.getBranchId(), pageable)
+                .map(inventoryMapper::toResponse));
+    }
+
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public InventoryResponse importStock(String username, ImportInventoryRequest request) {
         Branch branch = writableBranch(username);

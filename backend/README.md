@@ -62,3 +62,83 @@ $env:CORS_ALLOWED_ORIGINS = "http://localhost:3000"
 ```
 
 Khi bắt đầu làm từng chức năng, thêm dependency cần thiết vào `pom.xml`.
+
+## API tồn kho
+
+Tất cả endpoint dùng bearer access token và trả `ApiResponse`. Chi nhánh hiện tại
+được lấy từ `TaiKhoan.MaNhanVien` → `NhanVien.MaChiNhanh` trong DB, không nhận
+`branchId` từ request nhập/điều chỉnh kho. Nhân viên phải đang hoạt động.
+
+| Method | Endpoint | Chức năng |
+| --- | --- | --- |
+| GET | `/api/inventory` | Danh sách tồn kho chi nhánh hiện tại |
+| GET | `/api/inventory/products/{productId}` | Tồn kho sản phẩm tại chi nhánh hiện tại |
+| GET | `/api/inventory/branches/{branchId}` | Tồn kho chi nhánh được chỉ định |
+| POST | `/api/inventory/import` | Cộng số lượng nhập, tạo bản ghi nếu chưa có |
+| PATCH | `/api/inventory/{productId}` | Điều chỉnh số lượng tồn hoặc mức tồn tối thiểu |
+| GET | `/api/inventory/low-stock` | Sản phẩm có `quantity <= minimumStock`, bao gồm hết hàng |
+
+Các API danh sách nhận `page` (mặc định `0`) và `pageSize` (mặc định `20`, từ
+`1` đến `100`), sắp theo `productId`. `result` có `content`, `pageNumber`,
+`pageSize`, `totalElements`, `totalPages`, `last` như API sản phẩm.
+
+`STAFF` được đọc kho chi nhánh của mình. `ADMIN` và `MANAGER` được đọc chi nhánh
+khác và nhập/điều chỉnh kho chi nhánh hiện tại. Chi nhánh ngừng hoạt động vẫn có
+thể xem nhưng không thể nhập/điều chỉnh. Không thay đổi quyền hoặc chi nhánh bằng
+dữ liệu do client gửi lên.
+
+Nhập kho (HTTP `200` cho cả nhập lần đầu và nhập thêm):
+
+```http
+POST /api/inventory/import
+Content-Type: application/json
+Authorization: Bearer <access-token>
+
+{"productId":"SP00000001","quantity":10}
+```
+
+`quantity` bắt buộc là số nguyên dương. Sản phẩm phải tồn tại. Bản ghi mới có
+`minimumStock = 5`, đúng mặc định trong schema; nhập tiếp giữ mức tối thiểu hiện có.
+
+Điều chỉnh kho (HTTP `200`):
+
+```http
+PATCH /api/inventory/SP00000001
+Content-Type: application/json
+Authorization: Bearer <access-token>
+
+{"quantity":25,"minimumStock":8}
+```
+
+Gửi một hoặc cả hai trường; trường bỏ qua hoặc `null` được giữ nguyên. Phải có ít
+nhất một giá trị khác `null`, mỗi giá trị là số nguyên không âm. `quantity` ở
+PATCH là số lượng tuyệt đối sau kiểm kê, còn POST import là số lượng cộng thêm.
+PATCH không tạo bản ghi; dùng import trước nếu sản phẩm chưa có trong kho.
+
+Một bản ghi trả về trong `result` (hoặc `result.content` với API danh sách):
+
+```json
+{
+  "branchId": "CN01",
+  "productId": "SP00000001",
+  "quantity": 25,
+  "minimumStock": 8,
+  "updatedAt": "2026-10-22T12:00:00",
+  "lowStock": false
+}
+```
+
+Lỗi nghiệp vụ: `404/1014` sản phẩm không tồn tại, `404/1003` chi nhánh không tồn
+tại, `404/1021` chưa có bản ghi tồn kho, `409/1022` tổng số lượng vượt giới hạn
+SQL `INT`, `400/1023` PATCH rỗng, `409/1024` chi nhánh ngừng hoạt động,
+`409/1025` xung đột giao dịch (có thể thử lại). Dữ liệu không hợp lệ trả `400`,
+chưa đăng nhập trả `401`, thiếu quyền trả `403`.
+
+Nhập và điều chỉnh dùng transaction `SERIALIZABLE` cùng khóa ghi để bảo vệ cập
+nhật đồng thời, kể cả nhập lần đầu khi bản ghi chưa có. `updatedAt` được cập nhật
+mỗi lần ghi. Việc gọi GET kiểm tra kho chưa giữ hàng; khi triển khai thanh toán,
+cần kiểm tra và trừ tồn kho trong cùng transaction tạo hóa đơn.
+
+Các truy vấn hiện chạy trên database đang kết nối. API theo `branchId` không tự
+truy vấn Linked Server/site khác; nếu DB cục bộ không có tồn kho của chi nhánh đó
+thì danh sách rỗng. Không tạo hoặc thay đổi bảng `dbo.TonKho`.

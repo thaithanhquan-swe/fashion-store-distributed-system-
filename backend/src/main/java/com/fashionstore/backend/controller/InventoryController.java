@@ -86,6 +86,16 @@ public class InventoryController {
                 inventoryService.update(authentication.getName(), productId, request));
     }
 
+    @GetMapping("/low-stock")
+    @Operation(summary = "Lấy sản phẩm có số lượng tồn nhỏ hơn hoặc bằng mức tồn tối thiểu")
+    public ResponseEntity<ApiResponse<PageResponse<InventoryResponse>>> getLowStock(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return ok("Lấy danh sách sản phẩm sắp hết hàng thành công",
+                inventoryService.getLowStock(authentication.getName(), pageable(page, pageSize)));
+    }
+
     private Pageable pageable(int page, int pageSize) {
         if (page < 0 || pageSize < 1 || pageSize > 100) {
             throw new AppException(ErrorCode.INVALID_PAGE_REQUEST);
