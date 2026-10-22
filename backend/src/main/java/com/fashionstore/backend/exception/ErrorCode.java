@@ -26,6 +26,11 @@ public enum ErrorCode {
     CUSTOMER_NOT_FOUND(1018, "Không tìm thấy khách hàng", HttpStatus.NOT_FOUND),
     CUSTOMER_PHONE_ALREADY_EXISTS(1019, "Số điện thoại khách hàng đã tồn tại", HttpStatus.CONFLICT),
     CUSTOMER_ID_CAPACITY_EXCEEDED(1020, "Đã vượt giới hạn tạo mã khách hàng", HttpStatus.CONFLICT),
+    INVENTORY_NOT_FOUND(1021, "Chưa có tồn kho của sản phẩm tại chi nhánh này", HttpStatus.NOT_FOUND),
+    INVENTORY_QUANTITY_OVERFLOW(1022, "Số lượng tồn vượt giới hạn cho phép", HttpStatus.CONFLICT),
+    EMPTY_INVENTORY_UPDATE(1023, "Cần cung cấp số lượng tồn hoặc mức tồn tối thiểu", HttpStatus.BAD_REQUEST),
+    INVENTORY_BRANCH_INACTIVE(1024, "Chi nhánh đã ngừng hoạt động, không thể thay đổi tồn kho", HttpStatus.CONFLICT),
+    CONCURRENT_UPDATE(1025, "Dữ liệu đang được cập nhật bởi giao dịch khác, vui lòng thử lại", HttpStatus.CONFLICT),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
