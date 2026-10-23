@@ -6,12 +6,33 @@ import RoleGuard from './routes/RoleGuard'
 import { HOME, NAV } from './config/nav'
 import Placeholder from './pages/Placeholder'
 import LoginPage from './pages/auth/LoginPage'
+import InventoryPage from './pages/inventory/InventoryPage'
+import LowStockPage from './pages/inventory/LowStockPage'
+import AdminDashboardPage from './pages/dashboard/AdminDashboardPage'
+import StatisticsPage from './pages/statistics/StatisticsPage'
+import RevenueComparisonPage from './pages/statistics/RevenueComparisonPage'
+import TopProductsPage from './pages/statistics/TopProductsPage'
+import EmployeeSalesPage from './pages/statistics/EmployeeSalesPage'
 
 // ===== CHỖ CẮM TRANG =====
 // Làm xong trang nào thì import rồi thêm một dòng vào đây: '/đường-dẫn': <TênTrang />
 // Đường dẫn lấy đúng từ src/config/nav.js. Trang nào chưa có sẽ hiện Placeholder.
 const PAGES = {
   // '/admin/employees': <EmployeesPage />,
+
+  // Tồn kho: dùng chung cho staff, manager và admin.
+  '/staff/inventory': <InventoryPage />,
+  '/manager/inventory': <InventoryPage />,
+  '/admin/inventory': <InventoryPage />,
+  '/manager/low-stock': <LowStockPage />,
+
+  // Tổng quan và thống kê chuỗi.
+  '/admin/dashboard': <AdminDashboardPage />,
+  '/manager/statistics': <StatisticsPage />,
+  '/admin/statistics': <StatisticsPage />,
+  '/admin/revenue': <RevenueComparisonPage />,
+  '/admin/top-products': <TopProductsPage />,
+  '/admin/employee-sales': <EmployeeSalesPage />,
 }
 
 // Gom đường dẫn từ nav.js: mỗi đường dẫn được những role nào vào
