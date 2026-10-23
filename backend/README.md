@@ -55,6 +55,25 @@ $env:CORS_ALLOWED_ORIGINS = "http://localhost:3000"
 
 Ứng dụng chạy tại `http://localhost:8080`.
 
+### Tài khoản local có sẵn
+
+Profile mặc định `local` tự khởi tạo 3 tài khoản khi backend chạy:
+
+| Tên đăng nhập | Vai trò | Mật khẩu |
+| --- | --- | --- |
+| `admin` | `ADMIN` | `123456` |
+| `manager` | `MANAGER` | `123456` |
+| `staff` | `STAFF` | `123456` |
+
+Mật khẩu được lưu bằng BCrypt. Mỗi lần khởi động, 3 tài khoản trên được đồng bộ
+mật khẩu, vai trò và trạng thái hoạt động; tài khoản đã tồn tại được dùng lại,
+không tạo trùng hồ sơ nhân viên. Tài khoản mới được gắn với hồ sơ nhân viên riêng
+và chi nhánh đang hoạt động đầu tiên; nếu chưa có thì tạo chi nhánh local.
+
+Có thể đổi mật khẩu chung bằng `APP_BOOTSTRAP_ACCOUNTS_PASSWORD`, hoặc tắt khởi
+tạo/đồng bộ bằng `APP_BOOTSTRAP_ACCOUNTS_ENABLED=false` để giữ các thay đổi tài khoản
+qua những lần chạy lại. Chức năng này chỉ chạy trong profile `local`.
+
 ## Kiểm tra
 
 ```powershell
