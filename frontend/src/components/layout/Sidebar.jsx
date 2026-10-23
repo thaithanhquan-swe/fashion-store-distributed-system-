@@ -25,7 +25,7 @@ export default function Sidebar({ role, open, onClose }) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-6">
+        <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 pb-6">
           {items.map((item, i) =>
             item.group ? (
               <p key={item.group + i} className="px-3 pb-1 pt-5 text-[11px] font-bold uppercase tracking-wider text-white/40">
