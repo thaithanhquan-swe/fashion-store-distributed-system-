@@ -1,5 +1,6 @@
 import { getBranch } from '../config/branches'
-import { BRANCH_IDS, EMPLOYEES, INVOICE_DETAILS, INVOICES, wait } from './mockData'
+import { BRANCH_IDS, EMPLOYEES, wait } from './mockData'
+import { getAllInvoiceDetails, getAllInvoices } from './invoiceService'
 
 // Backend chưa có API thống kê, nên các hàm dưới đây trả dữ liệu giả.
 // Khi có API, chỉ thay phần thân hàm, trang giao diện giữ nguyên.
@@ -44,7 +45,7 @@ const dayKey = (date) => {
 }
 
 const filterInvoices = (branchId, days, window) =>
-  INVOICES.filter(
+  getAllInvoices().filter(
     (invoice) => (!branchId || invoice.branchId === branchId) && inWindow(invoice.createdAt, window),
   )
 
@@ -138,7 +139,7 @@ export async function getTopProducts({ branchId = null, days = 30, limit = 10, s
   const window = currentWindow(days)
   const invoices = filterInvoices(branchId, days, window)
   const invoiceIds = new Set(invoices.map((invoice) => invoice.invoiceId))
-  const lines = INVOICE_DETAILS.filter((line) => invoiceIds.has(line.invoiceId))
+  const lines = getAllInvoiceDetails().filter((line) => invoiceIds.has(line.invoiceId))
 
   const byProduct = new Map()
   for (const line of lines) {
@@ -204,7 +205,7 @@ export async function getEmployeeSales({ branchId = null, days = 30 } = {}) {
   const window = currentWindow(days)
   const invoices = filterInvoices(branchId, days, window)
   const invoiceIds = new Set(invoices.map((invoice) => invoice.invoiceId))
-  const lines = INVOICE_DETAILS.filter((line) => invoiceIds.has(line.invoiceId))
+  const lines = getAllInvoiceDetails().filter((line) => invoiceIds.has(line.invoiceId))
 
   const byEmployee = new Map()
   for (const invoice of invoices) {
