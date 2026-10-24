@@ -31,6 +31,17 @@ public enum ErrorCode {
     EMPTY_INVENTORY_UPDATE(1023, "Cần cung cấp số lượng tồn hoặc mức tồn tối thiểu", HttpStatus.BAD_REQUEST),
     INVENTORY_BRANCH_INACTIVE(1024, "Chi nhánh đã ngừng hoạt động, không thể thay đổi tồn kho", HttpStatus.CONFLICT),
     CONCURRENT_UPDATE(1025, "Dữ liệu đang được cập nhật bởi giao dịch khác, vui lòng thử lại", HttpStatus.CONFLICT),
+    SALE_INVALID_ITEMS(1026, "Danh sách sản phẩm không hợp lệ hoặc tổng số lượng vượt giới hạn", HttpStatus.BAD_REQUEST),
+    SALE_INSUFFICIENT_STOCK(1027, "Tồn kho không đủ để hoàn tất thanh toán", HttpStatus.CONFLICT),
+    SALE_PRODUCT_INACTIVE(1028, "Sản phẩm đã ngừng kinh doanh", HttpStatus.CONFLICT),
+    SALE_CUSTOMER_INACTIVE(1029, "Khách hàng đã ngừng hoạt động", HttpStatus.CONFLICT),
+    SALE_BRANCH_INACTIVE(1030, "Chi nhánh đã ngừng hoạt động, không thể bán hàng", HttpStatus.CONFLICT),
+    SALE_TOTAL_OVERFLOW(1031, "Tổng tiền hóa đơn vượt giới hạn cho phép", HttpStatus.BAD_REQUEST),
+    SALE_LOYALTY_OVERFLOW(1032, "Điểm tích lũy khách hàng vượt giới hạn cho phép", HttpStatus.CONFLICT),
+    INVOICE_NOT_FOUND(1033, "Không tìm thấy hóa đơn", HttpStatus.NOT_FOUND),
+    INVOICE_ALREADY_CANCELLED(1034, "Hóa đơn đã được hủy trước đó", HttpStatus.CONFLICT),
+    INVOICE_CANNOT_CANCEL(1035, "Chỉ có thể hủy hóa đơn đã thanh toán", HttpStatus.CONFLICT),
+    INVOICE_STOCK_OVERFLOW(1036, "Số lượng tồn vượt giới hạn khi hoàn hàng", HttpStatus.CONFLICT),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
