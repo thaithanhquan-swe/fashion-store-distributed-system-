@@ -7,4 +7,5 @@ target/
 .vscode/
 .env
 application-secret.properties
+/src/main/resources/application-local.properties
 hs_err_pid*
