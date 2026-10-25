@@ -3,6 +3,7 @@ package com.fashionstore.backend.repository;
 import com.fashionstore.backend.entity.Inventory;
 import com.fashionstore.backend.entity.InventoryId;
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +17,8 @@ import org.springframework.stereotype.Repository;
 public interface InventoryRepository extends JpaRepository<Inventory, InventoryId> {
 
     Page<Inventory> findAllByBranchId(String branchId, Pageable pageable);
+
+    List<Inventory> findAllByBranchId(String branchId);
 
     @Query("select i from Inventory i where i.branchId = :branchId and i.quantity <= i.minimumStock")
     Page<Inventory> findLowStock(@Param("branchId") String branchId, Pageable pageable);

@@ -205,3 +205,16 @@ Tất cả endpoint chi nhánh dùng bearer access token. Hệ thống gồm cá
 | POST | `/api/branches` | `ADMIN` | Tạo chi nhánh mới (dự phòng). |
 
 Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/branches/**`.
+
+
+## API Dashboard
+
+Tất cả endpoint dashboard dùng bearer access token để tổng hợp số liệu thời gian thực từ hóa đơn, tồn kho, sản phẩm và chi nhánh.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/dashboard/admin` | `ADMIN` | Lấy dữ liệu tổng quan toàn hệ thống cho Admin (doanh thu, hóa đơn, khách hàng, tồn kho, chuỗi thời gian, doanh thu chi nhánh, top sản phẩm, mặt hàng sắp hết, doanh số nhân viên; param `days`, mặc định 30). |
+| GET | `/api/dashboard/manager` | `ADMIN`, `MANAGER` | Lấy dữ liệu tổng quan chi nhánh cho Manager (Manager xem chi nhánh mình; Admin có thể truyền `branchId`; param `days`, mặc định 30). |
+| GET | `/api/dashboard/staff` | `ADMIN`, `MANAGER`, `STAFF` | Lấy dữ liệu làm việc cá nhân của Staff (doanh thu hôm nay, trong tháng, số hóa đơn đã lập và 5 hóa đơn gần nhất). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/dashboard/**`.
