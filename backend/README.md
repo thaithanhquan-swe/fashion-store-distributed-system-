@@ -192,3 +192,16 @@ Tất cả endpoint quản lý tài khoản dùng bearer access token.
 | PATCH | `/api/accounts/{accountId}/reset-password` | `ADMIN`, `MANAGER` | Reset mật khẩu tài khoản (tự sinh mật khẩu tạm `FSxxxxxx` hoặc đặt theo request; trả về mật khẩu mới). |
 
 Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/accounts/**`.
+
+
+## API chi nhánh
+
+Tất cả endpoint chi nhánh dùng bearer access token. Hệ thống gồm các chi nhánh cố định (Q1, Q7, Thủ Đức).
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/branches` | `ADMIN`, `MANAGER`, `STAFF` | Lấy danh sách tất cả chi nhánh (hỗ trợ query param `active=true/false`). |
+| GET | `/api/branches/{branchId}` | `ADMIN`, `MANAGER`, `STAFF` | Xem thông tin chi tiết một chi nhánh theo mã (`CN01`, `CN02`, `CN03`). |
+| POST | `/api/branches` | `ADMIN` | Tạo chi nhánh mới (dự phòng). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/branches/**`.
