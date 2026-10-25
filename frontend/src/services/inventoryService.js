@@ -1,6 +1,7 @@
 import { getBranch } from '../config/branches'
 import { STOCK_STATUS } from '../utils/format'
 import { INVENTORY, PRODUCTS, wait } from './mockData'
+import { loadMock, saveMock } from './mockStore'
 
 // Backend chưa có API tồn kho, nên các hàm dưới đây trả dữ liệu giả.
 // Khi có API, chỉ thay phần thân hàm, trang giao diện giữ nguyên.
@@ -15,8 +16,9 @@ const stockStatusOf = (quantity, minQuantity) => {
   return STOCK_STATUS.AVAILABLE
 }
 
-// Tồn kho giả được giữ trong bộ nhớ để thao tác nhập kho có hiệu lực trong phiên làm việc.
-let stockRows = INVENTORY.map((row) => ({ ...row }))
+// Lưu vào localStorage (mockStore) để bán hàng ở màn POS và nhập kho không mất khi F5.
+let stockRows = loadMock('inventory', INVENTORY.map((row) => ({ ...row })))
+const saveStock = () => saveMock('inventory', stockRows)
 
 const toRow = (row) => {
   const product = PRODUCT_MAP.get(row.productId)
@@ -82,7 +84,27 @@ export async function adjustStock({ branchId, productId, quantity }) {
   }
   row.quantity += quantity
   row.updatedAt = new Date().toISOString()
+  saveStock()
   return toRow(row)
+}
+
+// Trừ kho khi bán hàng (màn POS). items: [{productId, quantity}]. Kiểm tra đủ hàng trước, không đủ thì không trừ mã nào.
+export async function consumeStock({ branchId, items }) {
+  await wait(MOCK_DELAY)
+  for (const item of items) {
+    const row = stockRows.find((r) => r.branchId === branchId && r.productId === item.productId)
+    if (!row || row.quantity < item.quantity) {
+      const name = PRODUCT_MAP.get(item.productId)?.productName ?? item.productId
+      throw new Error(`Không đủ hàng trong kho: ${name}`)
+    }
+  }
+  const now = new Date().toISOString()
+  for (const item of items) {
+    const row = stockRows.find((r) => r.branchId === branchId && r.productId === item.productId)
+    row.quantity -= item.quantity
+    row.updatedAt = now
+  }
+  saveStock()
 }
 
 // Tổng quan tồn kho theo chi nhánh, dùng cho thẻ số liệu và tổng quan Admin.
