@@ -218,3 +218,18 @@ Tất cả endpoint dashboard dùng bearer access token để tổng hợp số 
 | GET | `/api/dashboard/staff` | `ADMIN`, `MANAGER`, `STAFF` | Lấy dữ liệu làm việc cá nhân của Staff (doanh thu hôm nay, trong tháng, số hóa đơn đã lập và 5 hóa đơn gần nhất). |
 
 Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/dashboard/**`.
+
+
+## API Thống kê
+
+Tất cả endpoint thống kê dùng bearer access token để tổng hợp báo cáo kinh doanh theo kỳ và theo chi nhánh.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/statistics/revenue` | `ADMIN`, `MANAGER` | Thống kê doanh thu theo khoảng thời gian (hỗ trợ params `branchId`, `days`, `from`, `to`). `MANAGER` chỉ xem chi nhánh mình. |
+| GET | `/api/statistics/revenue/branches` | `ADMIN`, `MANAGER` | So sánh doanh thu và tỷ trọng giữa các chi nhánh (hỗ trợ params `days`, `from`, `to`). |
+| GET | `/api/statistics/revenue/branches/{branchId}` | `ADMIN`, `MANAGER` | Xem doanh thu chi tiết của một chi nhánh theo mã. |
+| GET | `/api/statistics/top-products` | `ADMIN`, `MANAGER`, `STAFF` | Thống kê sản phẩm bán chạy (hỗ trợ params `branchId`, `days`, `limit`, `sortBy=revenue/quantity`). |
+| GET | `/api/statistics/employees` | `ADMIN`, `MANAGER` | Thống kê doanh số theo nhân viên (hỗ trợ params `branchId`, `days`, `limit`). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/statistics/**`.
