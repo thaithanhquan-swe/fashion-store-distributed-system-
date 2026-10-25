@@ -10,7 +10,7 @@ server.port=8080
 spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=Fashion_Central;encrypt=true;trustServerCertificate=true
 spring.datasource.username=sa
 # Điền mật khẩu tài khoản sa của SQL Server trên máy bạn vào đây:
-spring.datasource.password=123456789
+spring.datasource.password=<dien_mat_khau_sql_server_o_day>
 spring.datasource.driver-class-name=com.microsoft.sqlserver.jdbc.SQLServerDriver
 
 # Sử dụng schema có sẵn, không tự tạo bảng
@@ -22,8 +22,9 @@ spring.jpa.properties.hibernate.format_sql=false
 # CORS cho phép frontend kết nối (Vite mặc định cổng 5173)
 app.cors.allowed-origins=http://localhost:5173
 
-# Khóa bí mật JWT HS512 (chuỗi bí mật tối thiểu 64 bytes)
-jwt.signerKey=dbItA/Z1RTFExd5j5wIWbAYa+zKg5YODeg2uTInnVuL0x32XP96v3HDj8Gr+gR5uQzngh+xpXxrsdoOhDL5iFw==
+# Khóa bí mật JWT HS512 (chuỗi bí mật tối thiểu 64 bytes/ký tự)
+# LƯU Ý BẢO MẬT: Điền chuỗi khóa bí mật riêng của bạn (tối thiểu 64 bytes), không chia sẻ công khai
+jwt.signerKey=<dien_chuoi_khoa_bi_mat_jwt_hs512_toi_thieu_64_bytes_o_day>
 jwt.valid-duration=3600
 jwt.refreshable-duration=604800
 

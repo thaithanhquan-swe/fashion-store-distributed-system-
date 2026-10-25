@@ -62,7 +62,7 @@ Yêu cầu JDK 21 và Microsoft SQL Server. Xem hướng dẫn chi tiết từng
 ```powershell
 cd backend
 $env:SPRING_DATASOURCE_PASSWORD = "<mat-khau-sql-server>"
-$env:JWT_SIGNER_KEY = "dbItA/Z1RTFExd5j5wIWbAYa+zKg5YODeg2uTInnVuL0x32XP96v3HDj8Gr+gR5uQzngh+xpXxrsdoOhDL5iFw=="
+$env:JWT_SIGNER_KEY = "<chuoi-khoa-bi-mat-jwt-hs512-toi-thieu-64-bytes>"
 $env:CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 .\mvnw.cmd spring-boot:run
 ```

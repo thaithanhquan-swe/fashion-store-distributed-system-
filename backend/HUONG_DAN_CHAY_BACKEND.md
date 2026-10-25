@@ -35,12 +35,16 @@ Copy-Item backend\src\main\resources\application-local.properties.example backen
 > [!NOTE]
 > File `application-local.properties` đã được cấu hình trong `.gitignore`, bạn hoàn toàn yên tâm điền mật khẩu cá nhân mà không lo bị đẩy lên GitHub.
 
-### Bước 2: Điền mật khẩu SQL Server của máy bạn
-Mở file `backend/src/main/resources/application-local.properties` vừa tạo, tìm đến dòng:
-```properties
-spring.datasource.password=123456789
-```
-và đổi `123456789` thành mật khẩu của tài khoản `sa` trên máy bạn.
+### Bước 2: Điền thông tin kết nối và khóa bí mật của bạn
+Mở file `backend/src/main/resources/application-local.properties` vừa tạo, cập nhật hai thông tin cấu hình sau:
+1. **Mật khẩu SQL Server**: Đổi `<dien_mat_khau_sql_server_o_day>` thành mật khẩu tài khoản `sa` trên máy bạn:
+   ```properties
+   spring.datasource.password=mat_khau_sql_server_cua_ban
+   ```
+2. **Khóa bí mật JWT**: Đổi `<dien_chuoi_khoa_bi_mat_jwt_hs512_toi_thieu_64_bytes_o_day>` thành chuỗi khóa bí mật JWT của bạn (độ dài tối thiểu 64 bytes/ký tự cho thuật toán HS512):
+   ```properties
+   jwt.signerKey=chuoi_khoa_bi_mat_jwt_rieng_cua_ban_toi_thieu_64_bytes
+   ```
 
 ### Bước 3: Khởi chạy Backend
 Mở PowerShell tại thư mục `backend` và chạy:
@@ -65,8 +69,8 @@ Nếu không muốn tạo file `application-local.properties`, bạn có thể t
 
 ```powershell
 cd backend
-$env:SPRING_DATASOURCE_PASSWORD = "mat_khau_sql_server_cua_ban"
-$env:JWT_SIGNER_KEY = "dbItA/Z1RTFExd5j5wIWbAYa+zKg5YODeg2uTInnVuL0x32XP96v3HDj8Gr+gR5uQzngh+xpXxrsdoOhDL5iFw=="
+$env:SPRING_DATASOURCE_PASSWORD = "<mat_khau_sql_server_cua_ban>"
+$env:JWT_SIGNER_KEY = "<chuoi_khoa_bi_mat_jwt_hs512_toi_thieu_64_bytes>"
 $env:CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 .\mvnw.cmd spring-boot:run
 ```
@@ -120,6 +124,6 @@ Sau khi chạy backend, bạn mở trình duyệt web lên và kiểm tra:
 | **`Login failed for user 'sa'`** | Mật khẩu `sa` của SQL Server không khớp. | Kiểm tra lại mật khẩu `spring.datasource.password` trong file `application-local.properties`. Hãy thử đăng nhập vào SSMS bằng tài khoản `sa` với mật khẩu đó trước. |
 | **`Cannot open database "Fashion_Central"`** | Chưa có database trong SQL Server. | Mở SSMS, tạo database mới bằng lệnh `CREATE DATABASE Fashion_Central;` sau đó chạy file schema tạo bảng. |
 | **`The TCP/IP connection to the host localhost, port 1433 has failed`** | Dịch vụ SQL Server chưa bật cổng TCP/IP. | Mở `SQL Server Configuration Manager` > `SQL Server Network Configuration` > `Protocols for MSSQLSERVER` > Bật **TCP/IP** thành `Enabled` > Khởi động lại service SQL Server. |
-| **`JWT signer key must be at least 64 bytes for HS512`** | Chưa cấu hình hoặc cấu hình chuỗi bí mật JWT quá ngắn. | Đảm bảo file `application-local.properties` có dòng `jwt.signerKey=dbItA/Z1RTFExd5j5wIWbAYa+zKg5YODeg2uTInnVuL0x32XP96v3HDj8Gr+gR5uQzngh+xpXxrsdoOhDL5iFw==` (chuỗi base64 độ dài 64 bytes). |
+| **`JWT signer key must be at least 64 bytes for HS512`** | Chưa cấu hình hoặc cấu hình chuỗi bí mật JWT quá ngắn. | Đảm bảo file `application-local.properties` (hoặc biến môi trường `JWT_SIGNER_KEY`) có cấu hình `jwt.signerKey` với chuỗi bí mật độ dài tối thiểu 64 bytes (512 bits) để bảo mật cho thuật toán HS512. |
 | **`Address already in use: bind (port 8080)`** | Đang có ứng dụng khác chạy chiếm cổng 8080. | Tìm và tắt tiến trình đang chiếm cổng 8080 bằng lệnh `netstat -ano \| findstr :8080` rồi `taskkill /F /PID <PID>`, hoặc đổi cổng backend thành `server.port=8081`. |
 | **`Lỗi CORS khi gọi từ Frontend`** | Frontend Vite chạy ở port khác `5173`. | Kiểm tra file `application-local.properties` có dòng `app.cors.allowed-origins=http://localhost:5173`. |
