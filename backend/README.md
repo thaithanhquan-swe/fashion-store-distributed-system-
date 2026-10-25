@@ -20,50 +20,66 @@ src/main/java/com/fashionstore/backend/
 └── BackendApplication.java
 ```
 
-`src/main/resources` chứa `static`, `templates`, `application.properties` và `application-local.properties`.
+`src/main/resources` chứa `static`, `templates`, `application.properties`, `application-local.properties` và `application-local.properties.example`.
 
 ## Bảo mật API
 
 Tài khoản nhân viên được `ADMIN` tạo tại `POST /accounts`, gắn với hồ sơ nhân viên
 đã có trong DB và có thể được cấp vai trò phù hợp. Nhân viên dùng tài khoản đó để
-đăng nhập tại `POST /auth/login`; mật khẩu được so khớp bằng BCrypt. Tài khoản
+đăng nhập tại `POST /api/auth/login` (hoặc `/auth/login`); mật khẩu được so khớp bằng BCrypt. Tài khoản
 không hoạt động hoặc thông tin đăng nhập sai sẽ bị từ chối. Đăng nhập thành công
 trả về JWT HS512. Các API còn lại cần bearer token hợp lệ; Swagger UI và OpenAPI
 được truy cập công khai. Decoder kiểm tra chữ ký, thời hạn token và trạng thái/vai
 trò hiện tại của tài khoản trong DB.
-CORS nhận danh sách origin từ `CORS_ALLOWED_ORIGINS`, mặc định là
-`http://localhost:3000`.
+CORS nhận danh sách origin từ `CORS_ALLOWED_ORIGINS`, mặc định là `http://localhost:5173`.
 
-Các cấu hình JWT lấy từ `application-local.properties` qua ba thuộc tính
-`jwt.signerKey`, `jwt.valid-duration` và `jwt.refreshable-duration`. Thời hạn
-được tính bằng giây. Đăng nhập trả `token` và `refresh_token`; gửi refresh token
-đến `POST /auth/refresh_token` để cấp cặp token mới. Dùng access token để gọi
-`GET /auth/me` lấy tài khoản hiện tại hoặc `PUT /auth/change-password` để đổi mật
-khẩu; request đổi mật khẩu gồm `currentPassword` và `newPassword`.
+Các cấu hình JWT lấy qua hai thuộc tính `jwt.signerKey`, `jwt.valid-duration` và
+`jwt.refreshable-duration`. Thời hạn được tính bằng giây. Đăng nhập trả `token` và
+`refresh_token`; gửi refresh token đến `POST /api/auth/refresh_token` để cấp cặp token mới. Dùng access
+token để gọi `GET /api/auth/me` lấy tài khoản hiện tại hoặc `PUT /api/auth/change-password` để
+đổi mật khẩu; request đổi mật khẩu gồm `currentPassword` và `newPassword`.
 
 ## Chạy local
 
-Yêu cầu JDK 21. Chạy bằng Maven Wrapper trên PowerShell:
+Yêu cầu JDK 21 và Microsoft SQL Server. Xem hướng dẫn chi tiết từng bước tại:
+👉 [HUONG_DAN_CHAY_BACKEND.md](./HUONG_DAN_CHAY_BACKEND.md)
+
+### Cách 1: Dùng file `application-local.properties` (Khuyên dùng)
+
+1. Sao chép file cấu hình mẫu:
+   ```powershell
+   Copy-Item src\main\resources\application-local.properties.example src\main\resources\application-local.properties
+   ```
+2. Mở file `src/main/resources/application-local.properties` và sửa lại mật khẩu tài khoản `sa` của SQL Server máy bạn.
+3. Chạy backend bằng Maven Wrapper trên PowerShell:
+   ```powershell
+   cd backend
+   .\mvnw.cmd spring-boot:run
+   ```
+
+### Cách 2: Chạy bằng biến môi trường trên PowerShell
 
 ```powershell
-$env:APP_CONFIG_JWT_SIGNER_KEY = "<chuoi-bi-mat-it-nhat-64-byte>"
-$env:APP_CONFIG_JWT_VALID_DURATION = "86400"
-$env:APP_CONFIG_JWT_REFRESHABLE_DURATION = "86400"
-$env:CORS_ALLOWED_ORIGINS = "http://localhost:3000"
+cd backend
+$env:SPRING_DATASOURCE_PASSWORD = "<mat-khau-sql-server>"
+$env:JWT_SIGNER_KEY = "dbItA/Z1RTFExd5j5wIWbAYa+zKg5YODeg2uTInnVuL0x32XP96v3HDj8Gr+gR5uQzngh+xpXxrsdoOhDL5iFw=="
+$env:CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 .\mvnw.cmd spring-boot:run
 ```
 
 Ứng dụng chạy tại `http://localhost:8080`.
+- Swagger UI: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+- OpenAPI: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
 
 ### Tài khoản local có sẵn
 
-Profile mặc định `local` tự khởi tạo 3 tài khoản khi backend chạy:
+Profile mặc định `local` tự khởi tạo 3 tài khoản demo khi backend chạy:
 
-| Tên đăng nhập | Vai trò | Mật khẩu |
-| --- | --- | --- |
-| `admin` | `ADMIN` | `123456` |
-| `manager` | `MANAGER` | `123456` |
-| `staff` | `STAFF` | `123456` |
+| Tên đăng nhập | Vai trò | Mật khẩu | Chi nhánh |
+| --- | --- | --- | --- |
+| `admin` | `ADMIN` | `123456` | Toàn chuỗi |
+| `manager` | `MANAGER` | `123456` | Chi nhánh Q1 |
+| `staff` | `STAFF` | `123456` | Chi nhánh Q1 |
 
 Mật khẩu được lưu bằng BCrypt. Mỗi lần khởi động, 3 tài khoản trên được đồng bộ
 mật khẩu, vai trò và trạng thái hoạt động; tài khoản đã tồn tại được dùng lại,
@@ -77,10 +93,8 @@ qua những lần chạy lại. Chức năng này chỉ chạy trong profile `lo
 ## Kiểm tra
 
 ```powershell
-.\mvnw.cmd package
+.\mvnw.cmd test
 ```
-
-Khi bắt đầu làm từng chức năng, thêm dependency cần thiết vào `pom.xml`.
 
 ## API tồn kho
 
