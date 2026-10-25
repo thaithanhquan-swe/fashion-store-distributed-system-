@@ -161,3 +161,34 @@ cần kiểm tra và trừ tồn kho trong cùng transaction tạo hóa đơn.
 Các truy vấn hiện chạy trên database đang kết nối. API theo `branchId` không tự
 truy vấn Linked Server/site khác; nếu DB cục bộ không có tồn kho của chi nhánh đó
 thì danh sách rỗng. Không tạo hoặc thay đổi bảng `dbo.TonKho`.
+
+
+## API quản lý nhân viên
+
+Tất cả endpoint quản lý nhân viên dùng bearer access token, phân quyền `ADMIN` và `MANAGER`.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/employees` | `ADMIN`, `MANAGER` | Lấy danh sách nhân viên (hỗ trợ lọc `keyword`, `branchId`, `position`, `active`, phân trang). `MANAGER` chỉ xem được nhân viên chi nhánh mình. |
+| GET | `/api/employees/{employeeId}` | `ADMIN`, `MANAGER` | Xem chi tiết nhân viên theo mã |
+| POST | `/api/employees` | `ADMIN`, `MANAGER` | Thêm nhân viên mới (`MANAGER` chỉ tạo nhân viên cho chi nhánh mình) |
+| PUT | `/api/employees/{employeeId}` | `ADMIN`, `MANAGER` | Cập nhật thông tin nhân viên (`MANAGER` không được đổi chi nhánh nhân viên) |
+| PATCH | `/api/employees/{employeeId}/status` | `ADMIN`, `MANAGER` | Khóa hoặc mở trạng thái nhân viên (đồng bộ trạng thái tài khoản liên kết; không cho phép tự khóa chính mình) |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/employees/**`.
+
+
+## API quản lý tài khoản
+
+Tất cả endpoint quản lý tài khoản dùng bearer access token.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/accounts` | `ADMIN`, `MANAGER` | Lấy danh sách tài khoản nhân viên (hỗ trợ lọc `keyword`, `branchId`, `role`, `active`, phân trang). `MANAGER` chỉ xem được tài khoản chi nhánh mình. |
+| GET | `/api/accounts/{accountId}` | `ADMIN`, `MANAGER` | Xem chi tiết tài khoản theo `accountId` (hoặc `username`). |
+| POST | `/api/accounts` | `ADMIN`, `MANAGER` | Tạo tài khoản cho nhân viên (`MANAGER` chỉ tạo tài khoản vai trò `STAFF` cho nhân viên thuộc chi nhánh mình). |
+| PATCH | `/api/accounts/{accountId}/role` | `ADMIN` | Thay đổi quyền của tài khoản (không được tự đổi quyền chính mình). |
+| PATCH | `/api/accounts/{accountId}/status` | `ADMIN`, `MANAGER` | Khóa hoặc mở tài khoản (`MANAGER` chỉ khóa/mở tài khoản nhân viên chi nhánh mình; không cho phép tự khóa chính mình). |
+| PATCH | `/api/accounts/{accountId}/reset-password` | `ADMIN`, `MANAGER` | Reset mật khẩu tài khoản (tự sinh mật khẩu tạm `FSxxxxxx` hoặc đặt theo request; trả về mật khẩu mới). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/accounts/**`.

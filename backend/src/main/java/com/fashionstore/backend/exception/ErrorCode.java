@@ -42,6 +42,7 @@ public enum ErrorCode {
     INVOICE_ALREADY_CANCELLED(1034, "Hóa đơn đã được hủy trước đó", HttpStatus.CONFLICT),
     INVOICE_CANNOT_CANCEL(1035, "Chỉ có thể hủy hóa đơn đã thanh toán", HttpStatus.CONFLICT),
     INVOICE_STOCK_OVERFLOW(1036, "Số lượng tồn vượt giới hạn khi hoàn hàng", HttpStatus.CONFLICT),
+    ACCOUNT_NOT_FOUND(1037, "Không tìm thấy tài khoản", HttpStatus.NOT_FOUND),
     UNCATEGORIZED_EXCEPTION(9999, "Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
