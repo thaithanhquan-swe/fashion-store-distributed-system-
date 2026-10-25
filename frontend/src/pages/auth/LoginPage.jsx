@@ -6,10 +6,10 @@ import { useAuth } from '../../hooks/useAuth'
 import { BRANCHES } from '../../config/branches'
 import { HOME, ROLE_LABEL } from '../../config/nav'
 
-// Tài khoản demo: bấm để tự điền vào form (mật khẩu chung 123456)
+// Tài khoản có sẵn từ backend khi chạy local (mật khẩu chung 123456)
 const DEMO = [
-  { username: 'staff.q1', role: 'staff', hint: 'Quận 1' },
-  { username: 'manager.q1', role: 'manager', hint: 'Quận 1' },
+  { username: 'staff', role: 'staff', hint: 'Chi nhánh' },
+  { username: 'manager', role: 'manager', hint: 'Chi nhánh' },
   { username: 'admin', role: 'admin', hint: 'Toàn chuỗi' },
 ]
 
@@ -126,7 +126,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 border-t border-ink/10 pt-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink/50">Tài khoản demo · mật khẩu 123456</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink/50">Tài khoản có sẵn · mật khẩu 123456</p>
             <div className="mt-3 grid gap-2">
               {DEMO.map((d) => (
                 <button

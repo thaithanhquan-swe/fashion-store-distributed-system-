@@ -31,6 +31,8 @@ public class LocalAccountBootstrapService {
         ensureAccount("admin", Role.ADMIN, "Local Admin", "Administrator", password);
         ensureAccount("manager", Role.MANAGER, "Local Manager", "Manager", password);
         ensureAccount("staff", Role.STAFF, "Local Staff", "Staff", password);
+        ensureAccount("manager.q1", Role.MANAGER, "Local Manager Q1", "Manager", password);
+        ensureAccount("staff.q1", Role.STAFF, "Local Staff Q1", "Staff", password);
     }
 
     private void ensureAccount(String username, Role role, String fullName, String position, String password) {
