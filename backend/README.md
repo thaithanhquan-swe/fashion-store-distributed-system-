@@ -44,14 +44,10 @@ token để gọi `GET /api/auth/me` lấy tài khoản hiện tại hoặc `PUT
 Yêu cầu JDK 21 và Microsoft SQL Server. Xem hướng dẫn chi tiết từng bước tại:
 👉 [HUONG_DAN_CHAY_BACKEND.md](./HUONG_DAN_CHAY_BACKEND.md)
 
-### Cách 1: Dùng file `application-local.properties` (Khuyên dùng)
+### Cách 1: Cấu hình trực tiếp trong `application.properties` (Khuyên dùng)
 
-1. Sao chép file cấu hình mẫu:
-   ```powershell
-   Copy-Item src\main\resources\application-local.properties.example src\main\resources\application-local.properties
-   ```
-2. Mở file `src/main/resources/application-local.properties` và sửa lại mật khẩu tài khoản `sa` của SQL Server máy bạn.
-3. Chạy backend bằng Maven Wrapper trên PowerShell:
+1. Mở file `src/main/resources/application.properties` và điền mật khẩu tài khoản `sa` của SQL Server máy bạn (`spring.datasource.password`) cùng chuỗi khóa JWT (`jwt.signerKey`, tối thiểu 64 ký tự).
+2. Chạy backend bằng Maven Wrapper trên PowerShell:
    ```powershell
    cd backend
    .\mvnw.cmd spring-boot:run
