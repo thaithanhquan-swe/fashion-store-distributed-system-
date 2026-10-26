@@ -33,7 +33,9 @@ public class SecurityConfig {
                 .requestMatchers(
                         HttpMethod.POST,
                         "/auth/login",
-                        "/auth/refresh_token")
+                        "/auth/refresh_token",
+                        "/api/auth/login",
+                        "/api/auth/refresh_token")
                 .permitAll()
                 .requestMatchers(
                         "/swagger-ui/**",
@@ -57,18 +59,10 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         // CORS lấy cấu hình từ CorsConfig.
-        httpSecurity.cors(cors -> cors
-                .configurationSource(corsConfig.corsConfigurationSource()));
+        httpSecurity.cors(cors -> cors.configurationSource(corsConfig.corsConfigurationSource()));
 
-        // Tắt cơ chế đăng nhập form, HTTP Basic và CSRF cho REST API stateless.
-        httpSecurity.formLogin(AbstractHttpConfigurer::disable);
-        httpSecurity.httpBasic(AbstractHttpConfigurer::disable);
+        // Tắt CSRF vì API dùng JWT.
         httpSecurity.csrf(AbstractHttpConfigurer::disable);
-
-        // Trả JSON 401 theo định dạng chung của API.
-        httpSecurity.exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
-                .accessDeniedHandler(apiAccessDeniedHandler));
 
         return httpSecurity.build();
     }

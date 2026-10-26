@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    authService.logout()
     try {
       localStorage.removeItem(STORAGE_KEY)
     } catch {

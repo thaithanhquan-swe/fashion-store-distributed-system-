@@ -20,50 +20,62 @@ src/main/java/com/fashionstore/backend/
 └── BackendApplication.java
 ```
 
-`src/main/resources` chứa `static`, `templates`, `application.properties` và `application-local.properties`.
+`src/main/resources` chứa `static`, `templates`, `application.properties`, `application-local.properties` và `application-local.properties.example`.
 
 ## Bảo mật API
 
 Tài khoản nhân viên được `ADMIN` tạo tại `POST /accounts`, gắn với hồ sơ nhân viên
 đã có trong DB và có thể được cấp vai trò phù hợp. Nhân viên dùng tài khoản đó để
-đăng nhập tại `POST /auth/login`; mật khẩu được so khớp bằng BCrypt. Tài khoản
+đăng nhập tại `POST /api/auth/login` (hoặc `/auth/login`); mật khẩu được so khớp bằng BCrypt. Tài khoản
 không hoạt động hoặc thông tin đăng nhập sai sẽ bị từ chối. Đăng nhập thành công
 trả về JWT HS512. Các API còn lại cần bearer token hợp lệ; Swagger UI và OpenAPI
 được truy cập công khai. Decoder kiểm tra chữ ký, thời hạn token và trạng thái/vai
 trò hiện tại của tài khoản trong DB.
-CORS nhận danh sách origin từ `CORS_ALLOWED_ORIGINS`, mặc định là
-`http://localhost:3000`.
+CORS nhận danh sách origin từ `CORS_ALLOWED_ORIGINS`, mặc định là `http://localhost:5173`.
 
-Các cấu hình JWT lấy từ `application-local.properties` qua ba thuộc tính
-`jwt.signerKey`, `jwt.valid-duration` và `jwt.refreshable-duration`. Thời hạn
-được tính bằng giây. Đăng nhập trả `token` và `refresh_token`; gửi refresh token
-đến `POST /auth/refresh_token` để cấp cặp token mới. Dùng access token để gọi
-`GET /auth/me` lấy tài khoản hiện tại hoặc `PUT /auth/change-password` để đổi mật
-khẩu; request đổi mật khẩu gồm `currentPassword` và `newPassword`.
+Các cấu hình JWT lấy qua hai thuộc tính `jwt.signerKey`, `jwt.valid-duration` và
+`jwt.refreshable-duration`. Thời hạn được tính bằng giây. Đăng nhập trả `token` và
+`refresh_token`; gửi refresh token đến `POST /api/auth/refresh_token` để cấp cặp token mới. Dùng access
+token để gọi `GET /api/auth/me` lấy tài khoản hiện tại hoặc `PUT /api/auth/change-password` để
+đổi mật khẩu; request đổi mật khẩu gồm `currentPassword` và `newPassword`.
 
 ## Chạy local
 
-Yêu cầu JDK 21. Chạy bằng Maven Wrapper trên PowerShell:
+Yêu cầu JDK 21 và Microsoft SQL Server. Xem hướng dẫn chi tiết từng bước tại:
+👉 [HUONG_DAN_CHAY_BACKEND.md](./HUONG_DAN_CHAY_BACKEND.md)
+
+### Cách 1: Cấu hình trực tiếp trong `application.properties` (Khuyên dùng)
+
+1. Mở file `src/main/resources/application.properties` và điền mật khẩu tài khoản `sa` của SQL Server máy bạn (`spring.datasource.password`) cùng chuỗi khóa JWT (`jwt.signerKey`, tối thiểu 64 ký tự).
+2. Chạy backend bằng Maven Wrapper trên PowerShell:
+   ```powershell
+   cd backend
+   .\mvnw.cmd spring-boot:run
+   ```
+
+### Cách 2: Chạy bằng biến môi trường trên PowerShell
 
 ```powershell
-$env:APP_CONFIG_JWT_SIGNER_KEY = "<chuoi-bi-mat-it-nhat-64-byte>"
-$env:APP_CONFIG_JWT_VALID_DURATION = "86400"
-$env:APP_CONFIG_JWT_REFRESHABLE_DURATION = "86400"
-$env:CORS_ALLOWED_ORIGINS = "http://localhost:3000"
+cd backend
+$env:SPRING_DATASOURCE_PASSWORD = "<mat-khau-sql-server>"
+$env:JWT_SIGNER_KEY = "<chuoi-khoa-bi-mat-jwt-hs512-toi-thieu-64-bytes>"
+$env:CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 .\mvnw.cmd spring-boot:run
 ```
 
 Ứng dụng chạy tại `http://localhost:8080`.
+- Swagger UI: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+- OpenAPI: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
 
 ### Tài khoản local có sẵn
 
-Profile mặc định `local` tự khởi tạo 3 tài khoản khi backend chạy:
+Profile mặc định `local` tự khởi tạo 3 tài khoản demo khi backend chạy:
 
-| Tên đăng nhập | Vai trò | Mật khẩu |
-| --- | --- | --- |
-| `admin` | `ADMIN` | `123456` |
-| `manager` | `MANAGER` | `123456` |
-| `staff` | `STAFF` | `123456` |
+| Tên đăng nhập | Vai trò | Mật khẩu | Chi nhánh |
+| --- | --- | --- | --- |
+| `admin` | `ADMIN` | `123456` | Toàn chuỗi |
+| `manager` | `MANAGER` | `123456` | Chi nhánh Q1 |
+| `staff` | `STAFF` | `123456` | Chi nhánh Q1 |
 
 Mật khẩu được lưu bằng BCrypt. Mỗi lần khởi động, 3 tài khoản trên được đồng bộ
 mật khẩu, vai trò và trạng thái hoạt động; tài khoản đã tồn tại được dùng lại,
@@ -77,10 +89,8 @@ qua những lần chạy lại. Chức năng này chỉ chạy trong profile `lo
 ## Kiểm tra
 
 ```powershell
-.\mvnw.cmd package
+.\mvnw.cmd test
 ```
-
-Khi bắt đầu làm từng chức năng, thêm dependency cần thiết vào `pom.xml`.
 
 ## API tồn kho
 
@@ -161,3 +171,75 @@ cần kiểm tra và trừ tồn kho trong cùng transaction tạo hóa đơn.
 Các truy vấn hiện chạy trên database đang kết nối. API theo `branchId` không tự
 truy vấn Linked Server/site khác; nếu DB cục bộ không có tồn kho của chi nhánh đó
 thì danh sách rỗng. Không tạo hoặc thay đổi bảng `dbo.TonKho`.
+
+
+## API quản lý nhân viên
+
+Tất cả endpoint quản lý nhân viên dùng bearer access token, phân quyền `ADMIN` và `MANAGER`.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/employees` | `ADMIN`, `MANAGER` | Lấy danh sách nhân viên (hỗ trợ lọc `keyword`, `branchId`, `position`, `active`, phân trang). `MANAGER` chỉ xem được nhân viên chi nhánh mình. |
+| GET | `/api/employees/{employeeId}` | `ADMIN`, `MANAGER` | Xem chi tiết nhân viên theo mã |
+| POST | `/api/employees` | `ADMIN`, `MANAGER` | Thêm nhân viên mới (`MANAGER` chỉ tạo nhân viên cho chi nhánh mình) |
+| PUT | `/api/employees/{employeeId}` | `ADMIN`, `MANAGER` | Cập nhật thông tin nhân viên (`MANAGER` không được đổi chi nhánh nhân viên) |
+| PATCH | `/api/employees/{employeeId}/status` | `ADMIN`, `MANAGER` | Khóa hoặc mở trạng thái nhân viên (đồng bộ trạng thái tài khoản liên kết; không cho phép tự khóa chính mình) |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/employees/**`.
+
+
+## API quản lý tài khoản
+
+Tất cả endpoint quản lý tài khoản dùng bearer access token.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/accounts` | `ADMIN`, `MANAGER` | Lấy danh sách tài khoản nhân viên (hỗ trợ lọc `keyword`, `branchId`, `role`, `active`, phân trang). `MANAGER` chỉ xem được tài khoản chi nhánh mình. |
+| GET | `/api/accounts/{accountId}` | `ADMIN`, `MANAGER` | Xem chi tiết tài khoản theo `accountId` (hoặc `username`). |
+| POST | `/api/accounts` | `ADMIN`, `MANAGER` | Tạo tài khoản cho nhân viên (`MANAGER` chỉ tạo tài khoản vai trò `STAFF` cho nhân viên thuộc chi nhánh mình). |
+| PATCH | `/api/accounts/{accountId}/role` | `ADMIN` | Thay đổi quyền của tài khoản (không được tự đổi quyền chính mình). |
+| PATCH | `/api/accounts/{accountId}/status` | `ADMIN`, `MANAGER` | Khóa hoặc mở tài khoản (`MANAGER` chỉ khóa/mở tài khoản nhân viên chi nhánh mình; không cho phép tự khóa chính mình). |
+| PATCH | `/api/accounts/{accountId}/reset-password` | `ADMIN`, `MANAGER` | Reset mật khẩu tài khoản (tự sinh mật khẩu tạm `FSxxxxxx` hoặc đặt theo request; trả về mật khẩu mới). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/accounts/**`.
+
+
+## API chi nhánh
+
+Tất cả endpoint chi nhánh dùng bearer access token. Hệ thống gồm các chi nhánh cố định (Q1, Q7, Thủ Đức).
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/branches` | `ADMIN`, `MANAGER`, `STAFF` | Lấy danh sách tất cả chi nhánh (hỗ trợ query param `active=true/false`). |
+| GET | `/api/branches/{branchId}` | `ADMIN`, `MANAGER`, `STAFF` | Xem thông tin chi tiết một chi nhánh theo mã (`CN01`, `CN02`, `CN03`). |
+| POST | `/api/branches` | `ADMIN` | Tạo chi nhánh mới (dự phòng). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/branches/**`.
+
+
+## API Dashboard
+
+Tất cả endpoint dashboard dùng bearer access token để tổng hợp số liệu thời gian thực từ hóa đơn, tồn kho, sản phẩm và chi nhánh.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/dashboard/admin` | `ADMIN` | Lấy dữ liệu tổng quan toàn hệ thống cho Admin (doanh thu, hóa đơn, khách hàng, tồn kho, chuỗi thời gian, doanh thu chi nhánh, top sản phẩm, mặt hàng sắp hết, doanh số nhân viên; param `days`, mặc định 30). |
+| GET | `/api/dashboard/manager` | `ADMIN`, `MANAGER` | Lấy dữ liệu tổng quan chi nhánh cho Manager (Manager xem chi nhánh mình; Admin có thể truyền `branchId`; param `days`, mặc định 30). |
+| GET | `/api/dashboard/staff` | `ADMIN`, `MANAGER`, `STAFF` | Lấy dữ liệu làm việc cá nhân của Staff (doanh thu hôm nay, trong tháng, số hóa đơn đã lập và 5 hóa đơn gần nhất). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/dashboard/**`.
+
+
+## API Thống kê
+
+Tất cả endpoint thống kê dùng bearer access token để tổng hợp báo cáo kinh doanh theo kỳ và theo chi nhánh.
+
+| Method | Endpoint | Quyền | Chức năng |
+| --- | --- | --- | --- |
+| GET | `/api/statistics/revenue` | `ADMIN`, `MANAGER` | Thống kê doanh thu theo khoảng thời gian (hỗ trợ params `branchId`, `days`, `from`, `to`). `MANAGER` chỉ xem chi nhánh mình. |
+| GET | `/api/statistics/revenue/branches` | `ADMIN`, `MANAGER` | So sánh doanh thu và tỷ trọng giữa các chi nhánh (hỗ trợ params `days`, `from`, `to`). |
+| GET | `/api/statistics/revenue/branches/{branchId}` | `ADMIN`, `MANAGER` | Xem doanh thu chi tiết của một chi nhánh theo mã. |
+| GET | `/api/statistics/top-products` | `ADMIN`, `MANAGER`, `STAFF` | Thống kê sản phẩm bán chạy (hỗ trợ params `branchId`, `days`, `limit`, `sortBy=revenue/quantity`). |
+| GET | `/api/statistics/employees` | `ADMIN`, `MANAGER` | Thống kê doanh số theo nhân viên (hỗ trợ params `branchId`, `days`, `limit`). |
+
+Đồng thời hỗ trợ ánh xạ đường dẫn tương thích ngược `/statistics/**`.

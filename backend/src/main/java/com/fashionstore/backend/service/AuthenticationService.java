@@ -1,32 +1,35 @@
 package com.fashionstore.backend.service;
 
+import com.fashionstore.backend.configuration.CustomJwtDecoder;
 import com.fashionstore.backend.dto.request.ChangePasswordRequest;
 import com.fashionstore.backend.dto.request.LoginRequest;
 import com.fashionstore.backend.dto.request.RefreshTokenRequest;
 import com.fashionstore.backend.dto.response.AccountResponse;
 import com.fashionstore.backend.dto.response.LoginResponse;
-import com.fashionstore.backend.configuration.CustomJwtDecoder;
 import com.fashionstore.backend.entity.Account;
+import com.fashionstore.backend.entity.Employee;
 import com.fashionstore.backend.exception.AppException;
 import com.fashionstore.backend.exception.ErrorCode;
 import com.fashionstore.backend.repository.AccountRepository;
+import com.fashionstore.backend.repository.EmployeeRepository;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthenticationService {
 
     private final AccountRepository accountRepository;
+    private final EmployeeRepository employeeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final CustomJwtDecoder jwtDecoder;
@@ -35,12 +38,14 @@ public class AuthenticationService {
 
     public AuthenticationService(
             AccountRepository accountRepository,
+            EmployeeRepository employeeRepository,
             PasswordEncoder passwordEncoder,
             JwtEncoder jwtEncoder,
             CustomJwtDecoder jwtDecoder,
             @Value("${jwt.valid-duration}") long validDuration,
             @Value("${jwt.refreshable-duration}") long refreshableDuration) {
         this.accountRepository = accountRepository;
+        this.employeeRepository = employeeRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtEncoder = jwtEncoder;
         this.jwtDecoder = jwtDecoder;
@@ -59,12 +64,23 @@ public class AuthenticationService {
 
     public AccountResponse getCurrentAccount(String username) {
         Account account = findAccount(username);
+        String fullName = null;
+        String branchId = null;
+        if (account.getEmployeeId() != null) {
+            Employee emp = employeeRepository.findById(account.getEmployeeId()).orElse(null);
+            if (emp != null) {
+                fullName = emp.getFullName();
+                branchId = emp.getBranchId();
+            }
+        }
         return new AccountResponse(
                 account.getAccountId(),
                 account.getEmployeeId(),
                 account.getUsername(),
                 account.getRole(),
-                account.getActive());
+                account.getActive(),
+                fullName,
+                branchId);
     }
 
     public void changePassword(String username, ChangePasswordRequest request) {
@@ -102,8 +118,17 @@ public class AuthenticationService {
 
     private LoginResponse issueTokenPair(Account account) {
         String role = account.getRole().name();
-        String accessToken = createToken(account, role, "access", validDuration);
-        String refreshToken = createToken(account, role, "refresh", refreshableDuration);
+        String fullName = null;
+        String branchId = null;
+        if (account.getEmployeeId() != null) {
+            Employee emp = employeeRepository.findById(account.getEmployeeId()).orElse(null);
+            if (emp != null) {
+                fullName = emp.getFullName();
+                branchId = emp.getBranchId();
+            }
+        }
+        String accessToken = createToken(account, role, fullName, branchId, "access", validDuration);
+        String refreshToken = createToken(account, role, fullName, branchId, "refresh", refreshableDuration);
         return new LoginResponse(
                 accessToken,
                 refreshToken,
@@ -113,12 +138,15 @@ public class AuthenticationService {
                 account.getAccountId(),
                 account.getEmployeeId(),
                 account.getUsername(),
-                account.getRole());
+                account.getRole(),
+                fullName,
+                branchId);
     }
 
-    private String createToken(Account account, String role, String tokenType, long duration) {
+    private String createToken(
+            Account account, String role, String fullName, String branchId, String tokenType, long duration) {
         Instant issuedAt = Instant.now();
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        var claimsBuilder = JwtClaimsSet.builder()
                 .issuedAt(issuedAt)
                 .expiresAt(issuedAt.plusSeconds(duration))
                 .subject(account.getUsername())
@@ -126,8 +154,16 @@ public class AuthenticationService {
                 .claim("employeeId", account.getEmployeeId())
                 .claim("role", role)
                 .claim("roles", List.of(role))
-                .claim("token_type", tokenType)
-                .build();
+                .claim("token_type", tokenType);
+
+        if (fullName != null) {
+            claimsBuilder.claim("name", fullName);
+        }
+        if (branchId != null) {
+            claimsBuilder.claim("branchId", branchId);
+        }
+
+        JwtClaimsSet claims = claimsBuilder.build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS512).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }

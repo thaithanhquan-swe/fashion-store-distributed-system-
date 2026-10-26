@@ -12,5 +12,25 @@ public record LoginResponse(
         Integer accountId,
         String employeeId,
         String username,
-        Role role) {
+        Role role,
+        String fullName,
+        String branchId) {
+
+    public LoginResponse(
+            String token,
+            String refreshToken,
+            String tokenType,
+            long expiresIn,
+            long refreshExpiresIn,
+            Integer accountId,
+            String employeeId,
+            String username,
+            Role role) {
+        this(token, refreshToken, tokenType, expiresIn, refreshExpiresIn, accountId, employeeId, username, role, null, null);
+    }
+
+    @JsonProperty("name")
+    public String name() {
+        return fullName != null ? fullName : username;
+    }
 }

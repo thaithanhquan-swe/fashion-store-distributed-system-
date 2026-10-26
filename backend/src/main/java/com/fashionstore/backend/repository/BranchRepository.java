@@ -13,6 +13,8 @@ public interface BranchRepository extends JpaRepository<Branch, String> {
 
     Optional<Branch> findFirstByActiveTrueOrderByBranchIdAsc();
 
+    List<Branch> findAllByActiveOrderByBranchIdAsc(Boolean active);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<Branch> findAllByBranchIdStartingWith(String prefix);
 }

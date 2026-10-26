@@ -1,28 +1,57 @@
-// Dữ liệu giả cho đến khi backend có API đăng nhập.
-// Khi có API: thay thân hàm bằng fetch(`${API_URL}/...`), giữ nguyên dữ liệu trả về.
-const DEMO_ACCOUNTS = [
-  { username: 'staff.q1', name: 'Nguyễn Thị Mai', role: 'staff', branchId: 'CN01', employeeId: 'NV002' },
-  { username: 'manager.q1', name: 'Trần Minh Khoa', role: 'manager', branchId: 'CN01', employeeId: 'NV001' },
-  { username: 'admin', name: 'Ngô Thanh Tùng', role: 'admin', branchId: null, employeeId: 'NV010' },
-]
-let demoPassword = '123456' // giả lập mật khẩu chung, đổi được trong phiên chạy hiện tại
+import { authApi } from '../api/authApi'
+import { clearTokens, setTokens } from '../api/client'
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
+// Dịch vụ xác thực tài khoản tích hợp API backend.
 export async function login(username, password) {
-  await wait(400)
-  const acc = DEMO_ACCOUNTS.find((a) => a.username === username.trim())
-  if (!acc || password !== demoPassword) {
-    throw new Error('Sai tên đăng nhập hoặc mật khẩu')
+  const res = await authApi.login({
+    username: username.trim(),
+    password,
+  })
+
+  const token = res.token
+  const refreshToken = res.refreshToken || res.refresh_token
+  setTokens(token, refreshToken)
+
+  const role = (res.role || '').toLowerCase()
+  const name = res.fullName || res.name || res.username
+  const branchId = res.branchId || null
+  const employeeId = res.employeeId || null
+
+  return {
+    username: res.username,
+    name,
+    role,
+    branchId,
+    employeeId,
+    accountId: res.accountId,
+    token,
+    refreshToken,
   }
-  return acc
 }
 
-// Đổi mật khẩu của người đang đăng nhập. Ném Error nếu mật khẩu hiện tại sai.
+// Đổi mật khẩu của người dùng hiện tại qua backend API.
 export async function changePassword(currentPassword, newPassword) {
-  await wait(400)
-  if (currentPassword !== demoPassword) {
-    throw new Error('Mật khẩu hiện tại không đúng')
+  return authApi.changePassword({
+    currentPassword,
+    newPassword,
+  })
+}
+
+// Lấy thông tin tài khoản đang đăng nhập từ backend API.
+export async function getCurrentAccount() {
+  const res = await authApi.getCurrentUser()
+  return {
+    username: res.username,
+    name: res.employeeName || res.fullName || res.username,
+    role: (res.role || '').toLowerCase(),
+    branchId: res.branchId || null,
+    employeeId: res.employeeId || null,
+    accountId: res.accountId,
+    active: res.active,
   }
-  demoPassword = newPassword
+}
+
+// Đăng xuất và xóa token lưu trữ.
+export function logout() {
+  clearTokens()
 }
