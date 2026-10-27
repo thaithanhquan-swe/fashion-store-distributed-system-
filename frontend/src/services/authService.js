@@ -14,7 +14,7 @@ export async function login(username, password) {
 
   const role = (res.role || '').toLowerCase()
   const name = res.fullName || res.name || res.username
-  const branchId = res.branchId || null
+  const branchId = role === 'admin' ? null : res.branchId || null
   const employeeId = res.employeeId || null
 
   return {
@@ -44,7 +44,7 @@ export async function getCurrentAccount() {
     username: res.username,
     name: res.employeeName || res.fullName || res.username,
     role: (res.role || '').toLowerCase(),
-    branchId: res.branchId || null,
+    branchId: (res.role || '').toLowerCase() === 'admin' ? null : res.branchId || null,
     employeeId: res.employeeId || null,
     accountId: res.accountId,
     active: res.active,

@@ -30,6 +30,8 @@ export default function EmployeeListPage() {
   const [confirm, setConfirm] = useState(null) // nhân viên đang chờ xác nhận nghỉ / khôi phục
   const [busy, setBusy] = useState(false)
 
+  const [actionError, setActionError] = useState('')
+
   const rows = useMemo(() => {
     const q = norm(keyword.trim())
     return (data ?? []).filter(
@@ -42,11 +44,14 @@ export default function EmployeeListPage() {
 
   const changeStatus = async () => {
     setBusy(true)
+    setActionError('')
     const next = confirm.status === EMPLOYEE_STATUS.WORKING ? EMPLOYEE_STATUS.RESIGNED : EMPLOYEE_STATUS.WORKING
     try {
       await setEmployeeStatus(confirm.employeeId, next)
       setConfirm(null)
       reload()
+    } catch (err) {
+      setActionError(err.message)
     } finally {
       setBusy(false)
     }
@@ -175,15 +180,19 @@ export default function EmployeeListPage() {
         <ConfirmModal
           title={resigning ? 'Cho nhân viên nghỉ việc?' : 'Khôi phục nhân viên?'}
           message={
-            resigning
+            actionError ||
+            (resigning
               ? `${confirm.employeeName} (${confirm.employeeId}) sẽ chuyển sang trạng thái "Đã nghỉ". Dữ liệu hóa đơn cũ vẫn được giữ.`
-              : `${confirm.employeeName} (${confirm.employeeId}) sẽ quay lại trạng thái "Đang làm".`
+              : `${confirm.employeeName} (${confirm.employeeId}) sẽ quay lại trạng thái "Đang làm".`)
           }
           confirmLabel={resigning ? 'Cho nghỉ việc' : 'Khôi phục'}
           danger={resigning}
           loading={busy}
           onConfirm={changeStatus}
-          onClose={() => setConfirm(null)}
+          onClose={() => {
+            setConfirm(null)
+            setActionError('')
+          }}
         />
       )}
     </div>

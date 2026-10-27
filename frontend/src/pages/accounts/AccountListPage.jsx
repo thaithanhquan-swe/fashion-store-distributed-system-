@@ -4,7 +4,7 @@ import { Badge, Button, ConfirmModal, DataTable, EmptyState, Modal, SearchBar, S
 import { useAuth } from '../../hooks/useAuth'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { BRANCHES, getBranch } from '../../config/branches'
-import { formatDateTime } from '../../utils/format'
+
 import {
   ACCOUNT_ROLES,
   ACCOUNT_STATUS,
@@ -40,6 +40,8 @@ export default function AccountListPage() {
   const [tempPassword, setTempPassword] = useState(null) // { username, password }
   const [busy, setBusy] = useState(false)
 
+  const [actionError, setActionError] = useState('')
+
   const rows = useMemo(() => {
     const q = norm(keyword.trim())
     return (data ?? []).filter(
@@ -55,11 +57,14 @@ export default function AccountListPage() {
 
   const toggleLock = async () => {
     setBusy(true)
+    setActionError('')
     try {
       const next = lockTarget.status === ACCOUNT_STATUS.ACTIVE ? ACCOUNT_STATUS.LOCKED : ACCOUNT_STATUS.ACTIVE
       await setAccountStatus(lockTarget.username, next)
       setLockTarget(null)
       reload()
+    } catch (err) {
+      setActionError(err.message)
     } finally {
       setBusy(false)
     }
@@ -67,10 +72,13 @@ export default function AccountListPage() {
 
   const doReset = async () => {
     setBusy(true)
+    setActionError('')
     try {
       const password = await resetAccountPassword(resetTarget.username)
       setTempPassword({ username: resetTarget.username, password })
       setResetTarget(null)
+    } catch (err) {
+      setActionError(err.message)
     } finally {
       setBusy(false)
     }
@@ -95,11 +103,7 @@ export default function AccountListPage() {
       header: 'Trạng thái',
       render: (a) => <Badge tone={a.status === ACCOUNT_STATUS.ACTIVE ? 'ok' : 'bad'}>{ACCOUNT_STATUS_LABEL[a.status]}</Badge>,
     },
-    {
-      key: 'lastLogin',
-      header: 'Đăng nhập gần nhất',
-      render: (a) => <span className="whitespace-nowrap text-ink/70">{a.lastLogin ? formatDateTime(a.lastLogin) : 'Chưa đăng nhập'}</span>,
-    },
+    
     {
       key: 'actions',
       header: '',
@@ -211,30 +215,37 @@ export default function AccountListPage() {
         />
       )}
 
-      {lockTarget && (
+            {lockTarget && (
         <ConfirmModal
           title={locking ? 'Khóa tài khoản?' : 'Mở khóa tài khoản?'}
           message={
-            locking
+            actionError ||
+            (locking
               ? `${lockTarget.username} (${lockTarget.employeeName}) sẽ không đăng nhập được cho đến khi được mở khóa.`
-              : `${lockTarget.username} (${lockTarget.employeeName}) sẽ đăng nhập lại được bình thường.`
+              : `${lockTarget.username} (${lockTarget.employeeName}) sẽ đăng nhập lại được bình thường.`)
           }
           confirmLabel={locking ? 'Khóa tài khoản' : 'Mở khóa'}
           danger={locking}
           loading={busy}
           onConfirm={toggleLock}
-          onClose={() => setLockTarget(null)}
+          onClose={() => {
+            setLockTarget(null)
+            setActionError('')
+          }}
         />
       )}
 
       {resetTarget && (
         <ConfirmModal
           title="Đặt lại mật khẩu?"
-          message={`Hệ thống tạo mật khẩu tạm mới cho ${resetTarget.username}. Mật khẩu cũ sẽ không dùng được nữa.`}
+          message={actionError || `Hệ thống tạo mật khẩu tạm mới cho ${resetTarget.username}. Mật khẩu cũ sẽ không dùng được nữa.`}
           confirmLabel="Đặt lại"
           loading={busy}
           onConfirm={doReset}
-          onClose={() => setResetTarget(null)}
+          onClose={() => {
+            setResetTarget(null)
+            setActionError('')
+          }}
         />
       )}
 

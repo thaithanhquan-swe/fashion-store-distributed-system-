@@ -5,8 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { formatMoney, STOCK_STATUS } from '../../utils/format'
 import { getBranch } from '../../config/branches'
-import { getEmployeeSales, getRevenueSeries, getRevenueSummary, getTopProducts } from '../../services/statisticsService'
-import { getInventorySummary, listLowStock } from '../../services/inventoryService'
+import { getManagerDashboard } from '../../services/dashboardService'
 
 // Tổng quan Manager: doanh thu 30 ngày, tồn kho cảnh báo, sản phẩm bán chạy và nhân viên của chi nhánh mình.
 const DAYS = 30
@@ -38,17 +37,7 @@ function RevenueBars({ series }) {
 export default function ManagerDashboardPage() {
   const { user } = useAuth()
   const branchId = user.branchId
-  const { data, loading, error, reload } = useAsyncData(async () => {
-    const [summary, series, top, employees, inventory, low] = await Promise.all([
-      getRevenueSummary({ branchId, days: DAYS }),
-      getRevenueSeries({ branchId, days: DAYS }),
-      getTopProducts({ branchId, days: DAYS, limit: 5 }),
-      getEmployeeSales({ branchId, days: DAYS }),
-      getInventorySummary({ branchId }),
-      listLowStock({ branchId }),
-    ])
-    return { summary, series, top, employees, inventory, low }
-  }, [branchId])
+  const { data, loading, error, reload } = useAsyncData(() => getManagerDashboard({ days: DAYS }), [branchId])
 
   if (error) {
     return (

@@ -1,83 +1,70 @@
-import { wait } from './mockData'
+import { client, getAllPages } from '../api'
 import { getEmployees } from './employeeService'
-import { loadMock, saveMock } from './mockStore'
 
-// Dữ liệu giả cho đến khi backend có API tài khoản.
-// Khi có API: thay thân các hàm bằng fetch(`${API_URL}/...`), giữ nguyên dữ liệu trả về.
-//
-// Bám theo bảng TaiKhoan: username (TenDangNhap), employeeId (MaNV), role (VaiTro: staff/manager/admin),
-// status ('ACTIVE' = hoạt động, 'LOCKED' = đã khóa), lastLogin (ISO hoặc null).
-// Mỗi nhân viên có tối đa một tài khoản.
+// Tài khoản lấy từ backend (/api/accounts). Chỉ Admin và Manager gọi được; Manager chỉ thấy chi nhánh mình.
+// Backend định danh tài khoản bằng accountId (số), còn giao diện dùng username,
+// nên mỗi lần tải danh sách ta nhớ cặp username -> accountId để các hàm bên dưới tra lại.
+// Backend không có thông tin "đăng nhập gần nhất" nên lastLogin luôn là null.
 
 export const ACCOUNT_STATUS = { ACTIVE: 'ACTIVE', LOCKED: 'LOCKED' }
 export const ACCOUNT_STATUS_LABEL = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa' }
 export const ACCOUNT_ROLES = { staff: 'Nhân viên', manager: 'Quản lý', admin: 'Quản trị viên' }
 
-const daysAgo = (d, h = 9) => {
-  const t = new Date()
-  t.setDate(t.getDate() - d)
-  t.setHours(h, 15, 0, 0)
-  return t.toISOString()
+const idByUsername = new Map()
+
+const toAccount = (a) => {
+  const role = (a.role || '').toLowerCase()
+  idByUsername.set(a.username, a.accountId)
+  return {
+    accountId: a.accountId,
+    username: a.username,
+    employeeId: a.employeeId,
+    employeeName: a.employeeName ?? a.employeeId,
+    // Tài khoản Admin quản trị toàn chuỗi nên không gắn chi nhánh.
+    branchId: role === 'admin' ? null : (a.branchId ?? null),
+    role,
+    status: a.active === false ? ACCOUNT_STATUS.LOCKED : ACCOUNT_STATUS.ACTIVE,
+    lastLogin: null,
+  }
 }
 
-const SEED = [
-  { username: 'manager.q1', employeeId: 'NV001', role: 'manager', status: 'ACTIVE', lastLogin: daysAgo(0, 8) },
-  { username: 'staff.q1', employeeId: 'NV002', role: 'staff', status: 'ACTIVE', lastLogin: daysAgo(0, 8) },
-  { username: 'bao.q1', employeeId: 'NV003', role: 'staff', status: 'ACTIVE', lastLogin: daysAgo(1, 17) },
-  { username: 'manager.q2', employeeId: 'NV004', role: 'manager', status: 'ACTIVE', lastLogin: daysAgo(0, 7) },
-  { username: 'tuan.q2', employeeId: 'NV005', role: 'staff', status: 'ACTIVE', lastLogin: daysAgo(2, 18) },
-  { username: 'lan.q2', employeeId: 'NV006', role: 'staff', status: 'LOCKED', lastLogin: daysAgo(30, 10) },
-  { username: 'manager.q3', employeeId: 'NV007', role: 'manager', status: 'ACTIVE', lastLogin: daysAgo(1, 9) },
-  { username: 'ngan.q3', employeeId: 'NV008', role: 'staff', status: 'ACTIVE', lastLogin: null },
-  { username: 'admin', employeeId: 'NV010', role: 'admin', status: 'ACTIVE', lastLogin: daysAgo(0, 7) },
-]
-
-let db = loadMock('accounts', SEED)
-const commit = (next) => {
-  db = next
-  saveMock('accounts', db)
+const accountIdOf = (username) => {
+  const id = idByUsername.get(username)
+  if (id === undefined) throw new Error('Không tìm thấy tài khoản, hãy tải lại danh sách')
+  return id
 }
 
 // Danh sách tài khoản kèm tên nhân viên và chi nhánh. Truyền branchId để chỉ lấy một chi nhánh (Manager).
 export async function getAccounts({ branchId } = {}) {
-  const employees = await getEmployees({ branchId })
-  await wait(200)
-  const byId = new Map(employees.map((e) => [e.employeeId, e]))
-  return db
-    .filter((a) => byId.has(a.employeeId))
-    .map((a) => ({ ...a, employeeName: byId.get(a.employeeId).employeeName, branchId: byId.get(a.employeeId).branchId }))
+  const items = await getAllPages('/api/accounts', { branchId })
+  return items.map(toAccount)
 }
 
 // Nhân viên đang làm nhưng chưa có tài khoản, dùng cho ô chọn khi tạo tài khoản.
 export async function getEmployeesWithoutAccount({ branchId } = {}) {
-  const employees = await getEmployees({ branchId })
-  const hasAccount = new Set(db.map((a) => a.employeeId))
+  const [employees, accounts] = await Promise.all([getEmployees({ branchId }), getAllPages('/api/accounts', { branchId })])
+  const hasAccount = new Set(accounts.map((a) => a.employeeId))
   return employees.filter((e) => e.status === 'WORKING' && !hasAccount.has(e.employeeId))
 }
 
 export async function createAccount({ employeeId, username, password, role }) {
-  await wait(400)
   if (password.length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự')
-  if (db.some((a) => a.username === username)) throw new Error('Tên đăng nhập đã tồn tại')
-  if (db.some((a) => a.employeeId === employeeId)) throw new Error('Nhân viên này đã có tài khoản')
-  const created = { username, employeeId, role, status: ACCOUNT_STATUS.ACTIVE, lastLogin: null }
-  commit([...db, created])
-  return created
+  const saved = await client.post('/api/accounts', { employeeId, username, password, role: role.toUpperCase() })
+  return toAccount(saved)
 }
 
 export async function updateAccountRole(username, role) {
-    await wait(300)
-    commit(db.map((a) => (a.username === username ? { ...a, role } : a)))
+  const saved = await client.patch(`/api/accounts/${accountIdOf(username)}/role`, { role: role.toUpperCase() })
+  return toAccount(saved)
 }
 
 export async function setAccountStatus(username, status) {
-    await wait(300)
-    commit(db.map((a) => (a.username === username ? { ...a, status } : a)))
+  const saved = await client.patch(`/api/accounts/${accountIdOf(username)}/status`, { active: status === ACCOUNT_STATUS.ACTIVE })
+  return toAccount(saved)
 }
 
 // Đặt lại mật khẩu, trả về mật khẩu tạm để quản trị đưa cho nhân viên.
 export async function resetAccountPassword(username) {
-  await wait(400)
-  if (!db.some((a) => a.username === username)) throw new Error('Không tìm thấy tài khoản')
-  return `FS${Math.floor(100000 + Math.random() * 900000)}`
+  const res = await client.patch(`/api/accounts/${accountIdOf(username)}/reset-password`, {})
+  return res.tempPassword
 }

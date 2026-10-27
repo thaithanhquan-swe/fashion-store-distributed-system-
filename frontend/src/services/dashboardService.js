@@ -1,35 +1,26 @@
-import { getInventorySummary, listLowStock } from './inventoryService'
-import {
-  getEmployeeSales,
-  getRevenueByBranch,
-  getRevenueSeries,
-  getRevenueSummary,
-  getTopProducts,
-} from './statisticsService'
+import { buildQuery, client } from '../api'
 
-// Backend chưa có API tổng quan, nên hàm dưới đây ghép từ các API giả khác.
-// Khi có API, chỉ thay phần thân hàm, trang giao diện giữ nguyên.
+// Tổng quan lấy từ backend (/api/dashboard); backend tổng hợp sẵn doanh thu, tồn kho, top sản phẩm...
+// Các trang cần thêm: key cho dòng tồn kho, rank cho nhân viên (backend không trả hai trường này).
 
-// Dữ liệu tổng quan cho trang Tổng quan của Admin: toàn chuỗi, 30 ngày gần nhất.
+const withLowKey = (items = []) => items.map((i) => ({ ...i, key: `${i.branchId}-${i.productId}` }))
+const withRank = (items = []) => items.map((e, index) => ({ ...e, rank: e.rank ?? index + 1 }))
+
+// Tổng quan cho trang Tổng quan của Admin: toàn chuỗi, N ngày gần nhất.
 export async function getAdminDashboard({ days = 30 } = {}) {
-  const [revenue, inventory, series, branches, topProducts, lowStock, employees] = await Promise.all([
-    getRevenueSummary({ branchId: null, days }),
-    getInventorySummary({ branchId: null }),
-    getRevenueSeries({ branchId: null, days: Math.min(days, 14) }),
-    getRevenueByBranch({ days }),
-    getTopProducts({ branchId: null, days, limit: 5 }),
-    listLowStock({ branchId: null }),
-    getEmployeeSales({ branchId: null, days }),
-  ])
+  const res = await client.get(`/api/dashboard/admin${buildQuery({ days })}`)
+  return { ...res, lowStockItems: withLowKey(res.lowStockItems), employeeSales: withRank(res.employeeSales) }
+}
 
+// Tổng quan cho Manager (chi nhánh trong token). Trả về đúng dạng trang Manager đang dùng.
+export async function getManagerDashboard({ days = 30 } = {}) {
+  const res = await client.get(`/api/dashboard/manager${buildQuery({ days })}`)
   return {
-    summary: revenue,
-    inventory,
-    revenueSeries: series,
-    branchRevenue: branches,
-    topProducts,
-    lowStockItems: lowStock.slice(0, 8),
-    lowStockTotal: lowStock.length,
-    employeeSales: employees.slice(0, 5),
+    summary: res.summary,
+    series: res.revenueSeries,
+    top: res.topProducts,
+    employees: withRank(res.employeeSales),
+    inventory: res.inventory,
+    low: withLowKey(res.lowStockItems),
   }
 }

@@ -1,84 +1,73 @@
-import { wait } from './mockData'
-import { loadMock, saveMock } from './mockStore'
-import { listInvoices } from './invoiceService'
+import { client, getAllPages } from '../api'
 
-// Dữ liệu giả cho đến khi backend có API khách hàng.
-// Khi có API: thay thân các hàm bằng fetch(`${API_URL}/...`), giữ nguyên dữ liệu trả về.
-//
-// Bám theo bảng KhachHang (nhân bản toàn phần ở mọi site): customerId (MaKhachHang), fullName, phoneNumber, email, address, createdAt.
-// Mã và tên khớp với khách trong hóa đơn mẫu của mockData.
+// Gọi API khách hàng của backend (/api/customers).
+// Backend trả { customerId, fullName, phoneNumber, email, address, loyaltyPoints, registeredDate, active }.
+// Khách hàng dùng chung toàn chuỗi nên mọi vai trò đều xem được cùng một danh sách.
 
-const SEED = [
-  ['KH001', 'Trần Thị Hồng Nhung', '0901000001', 'nhung.tran@mail.com', 'Quận 1, TP.HCM'],
-  ['KH002', 'Lê Văn Hùng', '0901000002', 'hung.le@mail.com', 'Quận 3, TP.HCM'],
-  ['KH003', 'Phạm Quốc Bảo', '0901000003', 'bao.pham@mail.com', 'Quận 7, TP.HCM'],
-  ['KH004', 'Hoàng Thị Mai Anh', '0901000004', 'maianh.hoang@mail.com', 'Thủ Đức, TP.HCM'],
-  ['KH005', 'Vũ Đình Trung', '0901000005', 'trung.vu@mail.com', 'Quận 7, TP.HCM'],
-  ['KH006', 'Đỗ Thuỳ Linh', '0901000006', 'linh.do@mail.com', 'Quận 1, TP.HCM'],
-  ['KH007', 'Ngô Gia Bách', '0901000007', 'bach.ngo@mail.com', 'Thủ Đức, TP.HCM'],
-  ['KH008', 'Dương Mỹ Yến', '0901000008', 'yen.duong@mail.com', 'Quận 3, TP.HCM'],
-].map(([customerId, fullName, phoneNumber, email, address], i) => ({
-  customerId,
-  fullName,
-  phoneNumber,
-  email,
-  address,
-  createdAt: new Date(2026, 0, 5 + i * 9).toISOString(),
-}))
+const toCustomer = (c) => ({
+  customerId: c.customerId,
+  fullName: c.fullName,
+  phoneNumber: c.phoneNumber ?? '',
+  email: c.email ?? '',
+  address: c.address ?? '',
+  loyaltyPoints: c.loyaltyPoints ?? 0,
+  createdAt: c.registeredDate,
+  active: c.active !== false,
+})
 
-let db = loadMock('customers', SEED)
-const commit = (next) => {
-  db = next
-  saveMock('customers', db)
+const toInvoice = (i) => ({
+  invoiceId: i.invoiceId,
+  branchId: i.branchId,
+  customerId: i.customerId,
+  employeeId: i.employeeId,
+  createdAt: i.createdAt,
+  totalAmount: Number(i.totalAmount),
+  paymentMethod: i.paymentMethod,
+  status: i.status,
+})
+
+// active = true chỉ lấy khách đang hoạt động (dùng ở màn hình bán hàng).
+export async function listCustomers({ active } = {}) {
+  const items = await getAllPages('/api/customers', { active })
+  return items.map(toCustomer)
 }
 
-// Tổng chi tiêu và số hóa đơn tính từ hóa đơn (branchId: chỉ tính ở chi nhánh đó).
-export async function listCustomers({ branchId } = {}) {
-  await wait(250)
-  const invoices = await listInvoices({ branchId })
-  const stats = new Map()
-  for (const i of invoices) {
-    if (!i.customerId) continue
-    const s = stats.get(i.customerId) ?? { orderCount: 0, totalSpent: 0, lastPurchase: null }
-    s.orderCount += 1
-    s.totalSpent += i.totalAmount
-    if (!s.lastPurchase || i.createdAt > s.lastPurchase) s.lastPurchase = i.createdAt
-    stats.set(i.customerId, s)
-  }
-  return db.map((c) => ({ ...c, ...(stats.get(c.customerId) ?? { orderCount: 0, totalSpent: 0, lastPurchase: null }) }))
-}
-
+// Chi tiết khách kèm lịch sử mua hàng.
+// Backend trả hóa đơn ở mọi chi nhánh; nếu truyền branchId (Staff/Manager) thì chỉ giữ hóa đơn của chi nhánh đó.
 export async function getCustomer(customerId, { branchId } = {}) {
-  await wait(250)
-  const c = db.find((x) => x.customerId === customerId)
-  if (!c) throw new Error('Không tìm thấy khách hàng')
-  const invoices = await listInvoices({ branchId, customerId })
+  const [customer, invoices] = await Promise.all([
+    client.get(`/api/customers/${customerId}`),
+    getAllPages(`/api/customers/${customerId}/invoices`),
+  ])
+  const history = invoices
+    .map(toInvoice)
+    .filter((i) => !branchId || i.branchId === branchId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const paid = history.filter((i) => i.status === 'DA_THANH_TOAN')
   return {
-    ...c,
-    invoices,
-    orderCount: invoices.length,
-    totalSpent: invoices.reduce((s, i) => s + i.totalAmount, 0),
+    ...toCustomer(customer),
+    invoices: history,
+    orderCount: paid.length,
+    totalSpent: paid.reduce((s, i) => s + i.totalAmount, 0),
   }
 }
 
-// Thêm mới (không có customerId) hoặc cập nhật (có customerId). Số điện thoại không được trùng.
+// Thêm mới (không có customerId) hoặc cập nhật (có customerId). Backend kiểm tra số điện thoại trùng.
 export async function saveCustomer(data) {
-  await wait(400)
-  const fullName = data.fullName.trim()
-  const phoneNumber = data.phoneNumber.trim()
-  if (!fullName) throw new Error('Họ tên không được để trống')
-  if (!/^0\d{9}$/.test(phoneNumber)) throw new Error('Số điện thoại gồm 10 chữ số, bắt đầu bằng 0')
-  if (db.some((c) => c.phoneNumber === phoneNumber && c.customerId !== data.customerId)) {
-    throw new Error('Số điện thoại này đã thuộc về một khách hàng khác')
+  const body = {
+    fullName: data.fullName.trim(),
+    phoneNumber: data.phoneNumber.trim() || null,
+    email: data.email?.trim() || null,
+    address: data.address?.trim() || null,
   }
-  const clean = { fullName, phoneNumber, email: data.email?.trim() ?? '', address: data.address?.trim() ?? '' }
+  if (!body.fullName) throw new Error('Họ tên không được để trống')
 
-  if (data.customerId) {
-    commit(db.map((c) => (c.customerId === data.customerId ? { ...c, ...clean } : c)))
-    return db.find((c) => c.customerId === data.customerId)
-  }
-  const next = Math.max(...db.map((c) => Number(c.customerId.slice(2)))) + 1
-  const createdCustomer = { ...clean, customerId: `KH${String(next).padStart(3, '0')}`, createdAt: new Date().toISOString() }
-  commit([...db, createdCustomer])
-  return createdCustomer
+  const saved = data.customerId ? await client.put(`/api/customers/${data.customerId}`, body) : await client.post('/api/customers', body)
+  return toCustomer(saved)
+}
+
+// Ngừng hoạt động hoặc kích hoạt lại khách hàng (chỉ Admin và Manager).
+export async function setCustomerActive(customerId, active) {
+  const saved = await client.patch(`/api/customers/${customerId}/status`, { active })
+  return toCustomer(saved)
 }

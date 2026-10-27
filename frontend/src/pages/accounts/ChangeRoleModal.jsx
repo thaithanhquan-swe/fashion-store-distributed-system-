@@ -6,11 +6,18 @@ import { updateAccountRole } from '../../services/accountService'
 export default function ChangeRoleModal({ account, onClose, onSaved }) {
   const [role, setRole] = useState(account.role)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const save = async () => {
     setLoading(true)
-    await updateAccountRole(account.username, role)
-    onSaved()
+    setError('')
+    try {
+      await updateAccountRole(account.username, role)
+      onSaved()
+    } catch (err) {
+      setError(err.message)
+      setLoading(false)
+    }
   }
 
   return (
@@ -41,6 +48,7 @@ export default function ChangeRoleModal({ account, onClose, onSaved }) {
           ]}
         />
       </Field>
+      {error && <p className="mt-3 text-sm font-medium text-bad">{error}</p>}
     </Modal>
   )
 }

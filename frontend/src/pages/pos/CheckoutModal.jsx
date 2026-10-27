@@ -6,14 +6,13 @@ import { useAuth } from '../../hooks/useAuth'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { formatMoney } from '../../utils/format'
 import { listCustomers } from '../../services/customerService'
-import { consumeStock } from '../../services/inventoryService'
-import { PAYMENT_LABEL, createInvoice } from '../../services/invoiceService'
+  import { PAYMENT_LABEL, checkout } from '../../services/invoiceService'
 import CustomerFormModal from '../customers/CustomerFormModal'
 
 // Thanh toán giỏ hàng: chọn khách (hoặc khách lẻ / thêm khách mới), hình thức thanh toán, rồi tạo hóa đơn và trừ kho.
 export default function CheckoutModal({ cart, total, onClose, onDone }) {
   const { user } = useAuth()
-  const { data: customers, reload } = useAsyncData(() => listCustomers(), [])
+  const { data: customers, reload } = useAsyncData(() => listCustomers({ active: true }), [])
   const [customerId, setCustomerId] = useState('')
   const [method, setMethod] = useState('TIEN_MAT')
   const [adding, setAdding] = useState(false)
@@ -23,28 +22,24 @@ export default function CheckoutModal({ cart, total, onClose, onDone }) {
 
   const customer = customers?.find((c) => c.customerId === customerId)
 
-  const pay = async () => {
-    if (loading) return
-    setLoading(true)
-    setError('')
-    try {
-      const items = cart.map((l) => ({ productId: l.productId, quantity: l.quantity }))
-      await consumeStock({ branchId: user.branchId, items })
-      const created = await createInvoice({
-        branchId: user.branchId,
-        customerId: customer?.customerId ?? null,
-        customerName: customer?.fullName ?? '',
-        employeeId: user.employeeId,
-        paymentMethod: method,
-        lines: cart.map((l) => ({ productId: l.productId, productName: l.productName, quantity: l.quantity, unitPrice: l.price, discount: 0 })),
-      })
-      setInvoice(created)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+    const pay = async () => {
+      if (loading) return
+      setLoading(true)
+      setError('')
+      try {
+        const created = await checkout({
+          customerId: customer?.customerId ?? null,
+          customerName: customer?.fullName ?? '',
+          paymentMethod: method,
+          items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+        })
+        setInvoice(created)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+      }
 
   if (invoice) {
     return (
