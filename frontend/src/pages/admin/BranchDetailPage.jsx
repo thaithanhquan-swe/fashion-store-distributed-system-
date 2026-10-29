@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CircleOff, MapPin, Phone, Receipt, TriangleAlert, UserRound, Users, Wallet } from 'lucide-react'
 import { Badge, Button, Card, EmptyState, Spinner, StatCard } from '../../components/ui'
 import { useAsyncData } from '../../hooks/useAsyncData'
-import { formatDate, formatMoney, STOCK_STATUS } from '../../utils/format'
+import { formatMoney, STOCK_STATUS } from '../../utils/format'
 import { getBranchDetail } from '../../services/branchService'
 
 // Biểu đồ cột doanh thu theo ngày, vẽ bằng thẻ div (không cần thư viện biểu đồ).
@@ -84,7 +84,7 @@ export default function BranchDetailPage() {
           <li className="flex items-center gap-1.5">
             <UserRound size={15} className="text-ink/40" /> Quản lý: {b.manager}
           </li>
-          <li className="text-ink/50">Khai trương {formatDate(b.openedAt)}</li>
+          
         </ul>
       </div>
 

@@ -40,9 +40,33 @@ public class BranchService {
         if (branchId == null || branchId.isBlank()) {
             throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
         }
-        Branch branch = branchRepository.findById(branchId.trim())
-                .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND));
+        Branch branch = findBranch(branchId.trim());
         return branchMapper.toResponse(branch);
+    }
+
+    private Branch findBranch(String branchId) {
+        java.util.Optional<Branch> branch = branchRepository.findById(branchId);
+        if (branch.isPresent()) {
+            return branch.get();
+        }
+        if (branchId.matches("(?i)CN\\d+")) {
+            try {
+                int num = Integer.parseInt(branchId.substring(2));
+                for (String alias : java.util.List.of(
+                        String.format(java.util.Locale.ROOT, "CN%03d", num),
+                        String.format(java.util.Locale.ROOT, "CN%02d", num),
+                        String.format(java.util.Locale.ROOT, "CN%d", num))) {
+                    if (!alias.equalsIgnoreCase(branchId)) {
+                        java.util.Optional<Branch> found = branchRepository.findById(alias);
+                        if (found.isPresent()) {
+                            return found.get();
+                        }
+                    }
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE)

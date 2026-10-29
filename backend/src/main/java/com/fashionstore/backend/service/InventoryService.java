@@ -58,12 +58,12 @@ public class InventoryService {
     public PageResponse<InventoryResponse> getBranch(String username, String branchId, Pageable pageable) {
         Account account = findAccount(username);
         Branch ownBranch = currentBranch(account);
-        if (!ownBranch.getBranchId().equals(branchId)
+        Branch targetBranch = findBranch(branchId);
+        if (!ownBranch.getBranchId().equalsIgnoreCase(targetBranch.getBranchId())
                 && account.getRole() != Role.ADMIN && account.getRole() != Role.MANAGER) {
             throw new AppException(ErrorCode.ACCESS_DENIED);
         }
-        findBranch(branchId);
-        return listBranch(branchId, pageable);
+        return listBranch(targetBranch.getBranchId(), pageable);
     }
 
     @Transactional(readOnly = true)
@@ -136,8 +136,28 @@ public class InventoryService {
     }
 
     private Branch findBranch(String branchId) {
-        return branchRepository.findById(branchId)
-                .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND));
+        java.util.Optional<Branch> branch = branchRepository.findById(branchId);
+        if (branch.isPresent()) {
+            return branch.get();
+        }
+        if (branchId.matches("(?i)CN\\d+")) {
+            try {
+                int num = Integer.parseInt(branchId.substring(2));
+                for (String alias : java.util.List.of(
+                        String.format(java.util.Locale.ROOT, "CN%03d", num),
+                        String.format(java.util.Locale.ROOT, "CN%02d", num),
+                        String.format(java.util.Locale.ROOT, "CN%d", num))) {
+                    if (!alias.equalsIgnoreCase(branchId)) {
+                        java.util.Optional<Branch> found = branchRepository.findById(alias);
+                        if (found.isPresent()) {
+                            return found.get();
+                        }
+                    }
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
     }
 
     private void requireProduct(String productId) {

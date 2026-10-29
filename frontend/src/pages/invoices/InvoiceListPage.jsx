@@ -22,12 +22,12 @@ export default function InvoiceListPage() {
   const { data, loading, error, reload } = useAsyncData(() => listInvoices({ branchId, keyword, method }), [branchId, keyword, method])
 
   const columns = [
-    { key: 'invoiceId', header: 'Mã hóa đơn', render: (i) => <span className="font-semibold">{i.invoiceId}</span> },
+    { key: 'invoiceId', header: 'Mã hóa đơn', render: (i) => ( <div className="flex items-center gap-2"> <span className="font-semibold">{i.invoiceId}</span> {i.status === 'DA_HUY' && <Badge tone="bad">Đã hủy</Badge>} </div> )},
     { key: 'createdAt', header: 'Thời gian', render: (i) => <span className="whitespace-nowrap">{formatDateTime(i.createdAt)}</span> },
     ...(isAdmin ? [{ key: 'branchId', header: 'Chi nhánh' }] : []),
     { key: 'customerName', header: 'Khách hàng', render: (i) => <span className="whitespace-nowrap">{i.customerName}</span> },
-    { key: 'employeeName', header: 'Nhân viên', render: (i) => <span className="whitespace-nowrap">{i.employeeName}</span> },
-    { key: 'paymentMethod', header: 'Thanh toán', render: (i) => <Badge>{PAYMENT_LABEL[i.paymentMethod]}</Badge> },
+    { key: 'employeeName', header: 'Mã nhân viên', render: (i) => <span className="whitespace-nowrap">{i.employeeName}</span> },
+    { key: 'paymentMethod', header: 'Thanh toán', render: (i) => <Badge>{PAYMENT_LABEL[i.paymentMethod] ?? i.paymentMethod}</Badge> },
     { key: 'totalAmount', header: 'Tổng tiền', align: 'right', render: (i) => <span className="whitespace-nowrap font-semibold tabular-nums">{formatMoney(i.totalAmount)}</span> },
   ]
 

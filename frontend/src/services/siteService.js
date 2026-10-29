@@ -19,9 +19,9 @@ const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString()
 // link: 'UP' | 'DOWN'. pendingBase: số thay đổi đang chờ. downSince: lúc bắt đầu mất kết nối.
 const SEED_SITES = [
   { siteId: 'CENTRAL', name: 'Central', kind: 'central', host: 'central.fashionstore.local', baseLatency: 18, latencyMs: 18, link: 'UP', lastSyncAt: minutesAgo(1), pendingBase: 0, downSince: null },
-  { siteId: 'CN01', name: 'Site Quận 1', kind: 'branch', branchId: 'CN01', host: 'q1.fashionstore.local', baseLatency: 42, latencyMs: 42, link: 'UP', lastSyncAt: minutesAgo(2), pendingBase: 3, downSince: null },
-  { siteId: 'CN02', name: 'Site Quận 7', kind: 'branch', branchId: 'CN02', host: 'q7.fashionstore.local', baseLatency: 65, latencyMs: 65, link: 'UP', lastSyncAt: minutesAgo(4), pendingBase: 7, downSince: null },
-  { siteId: 'CN03', name: 'Site Thủ Đức', kind: 'branch', branchId: 'CN03', host: 'td.fashionstore.local', baseLatency: 410, latencyMs: 410, link: 'UP', lastSyncAt: minutesAgo(38), pendingBase: 41, downSince: null },
+  { siteId: 'CN01', name: 'Site Quận 1', kind: 'branch', branchId: 'CN001', host: 'q1.fashionstore.local', baseLatency: 42, latencyMs: 42, link: 'UP', lastSyncAt: minutesAgo(2), pendingBase: 3, downSince: null },
+  { siteId: 'CN02', name: 'Site Quận 3', kind: 'branch', branchId: 'CN002', host: 'q3.fashionstore.local', baseLatency: 65, latencyMs: 65, link: 'UP', lastSyncAt: minutesAgo(4), pendingBase: 7, downSince: null },
+  { siteId: 'CN03', name: 'Site Thủ Đức', kind: 'branch', branchId: 'CN003', host: 'td.fashionstore.local', baseLatency: 410, latencyMs: 410, link: 'UP', lastSyncAt: minutesAgo(38), pendingBase: 41, downSince: null },
 ]
 
 const SEED_LOG = [
@@ -76,7 +76,8 @@ export async function getSyncLog({ limit = 30 } = {}) {
 // Tóm tắt cho thanh trên cùng. Truyền branchId để chỉ xét Central và site của chi nhánh đó.
 export async function getSiteSummary({ branchId = null } = {}) {
   await wait(100)
-  const relevant = sites.filter((s) => !branchId || s.kind === 'central' || s.branchId === branchId).map(derive)
+  const normId = (id) => (id ? id.replace(/^CN0+/, 'CN').toUpperCase() : '')
+  const relevant = sites.filter((s) => !branchId || s.kind === 'central' || normId(s.branchId) === normId(branchId)).map(derive)
   const offline = relevant.filter((s) => s.status === SITE_STATUS.OFFLINE).length
   const degraded = relevant.filter((s) => s.status === SITE_STATUS.DEGRADED).length
   return {

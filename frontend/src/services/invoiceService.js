@@ -1,90 +1,94 @@
-import { BRANCH_IDS, EMPLOYEES, INVOICES, INVOICE_DETAILS, wait } from './mockData'
-import { loadMock, saveMock } from './mockStore'
+import { client, getAllPages } from '../api'
+import { listCustomers } from './customerService'
 
-// Dữ liệu giả cho đến khi backend có API hóa đơn.
-// Khi có API: thay thân các hàm bằng fetch(`${API_URL}/...`), giữ nguyên dữ liệu trả về.
-//
-// Bám theo bảng HoaDon / ChiTietHoaDon: invoiceId, branchId, customerId, customerName, employeeId,
-// createdAt, totalAmount, paymentMethod, status; dòng chi tiết: productId, productName, quantity, unitPrice, discount, lineTotal.
+// Hóa đơn lấy từ backend (/api/invoices) và thanh toán qua /api/sales/checkout.
+// Backend: Admin xem toàn chuỗi, Manager/Staff chỉ thấy hóa đơn chi nhánh mình.
+// Danh sách hóa đơn không có tên khách và tên nhân viên, nên tên khách được ghép từ danh sách khách hàng;
+// tên nhân viên backend không trả cho mọi vai trò nên hiển thị mã nhân viên.
 
 export const PAYMENT_METHOD = { TIEN_MAT: 'TIEN_MAT', THE: 'THE', CHUYEN_KHOAN: 'CHUYEN_KHOAN' }
 export const PAYMENT_LABEL = { TIEN_MAT: 'Tiền mặt', THE: 'Thẻ', CHUYEN_KHOAN: 'Chuyển khoản' }
+export const INVOICE_STATUS = { PAID: 'DA_THANH_TOAN', CANCELLED: 'DA_HUY' }
 
-// Hóa đơn tạo thêm từ màn hình bán hàng được lưu riêng, ghép với dữ liệu mẫu có sẵn.
-let created = loadMock('invoices-new', { invoices: [], details: [] })
-const commit = (next) => {
-  created = next
-  saveMock('invoices-new', created)
-}
 
-const employeeName = (id) => EMPLOYEES.find((e) => e.employeeId === id)?.employeeName ?? id
-const allInvoices = () => [...INVOICES, ...created.invoices]
-const allDetails = () => [...INVOICE_DETAILS, ...created.details]
+const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
 
-// Bản đồng bộ (gồm cả hóa đơn tạo ở màn POS) cho statisticsService tính doanh thu.
-export const getAllInvoices = allInvoices
-export const getAllInvoiceDetails = allDetails
+const toInvoice = (i, customerName) => ({
+  invoiceId: i.invoiceId,
+  branchId: i.branchId,
+  customerId: i.customerId ?? null,
+  customerName: customerName ?? (i.customerId ? i.customerId : 'Khách lẻ'),
+  employeeId: i.employeeId,
+  employeeName: i.employeeId,
+  createdAt: i.createdAt,
+  totalAmount: Number(i.totalAmount),
+  paymentMethod: i.paymentMethod,
+  status: i.status,
+})
 
 // Lọc theo chi nhánh, khách hàng, từ khóa (mã hóa đơn / tên khách), hình thức thanh toán; mới nhất trước.
 export async function listInvoices({ branchId, customerId, keyword = '', method = '' } = {}) {
-  await wait(250)
-  const q = keyword.trim().toLowerCase()
-  return allInvoices()
+  const [items, customers] = await Promise.all([
+    getAllPages('/api/invoices'),
+    listCustomers().catch(() => []),
+  ])
+  const names = new Map(customers.map((c) => [c.customerId, c.fullName]))
+  const q = norm(keyword.trim())
+  return items
+    .map((i) => toInvoice(i, names.get(i.customerId)))
     .filter(
       (i) =>
         (!branchId || i.branchId === branchId) &&
         (!customerId || i.customerId === customerId) &&
         (!method || i.paymentMethod === method) &&
-        (!q || i.invoiceId.toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q)),
+        (!q || norm(i.invoiceId).includes(q) || norm(i.customerName).includes(q)),
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((i) => ({ ...i, employeeName: employeeName(i.employeeId) }))
 }
 
-export async function getInvoice(invoiceId) {
-  await wait(250)
-  const inv = allInvoices().find((i) => i.invoiceId === invoiceId)
-  if (!inv) throw new Error('Không tìm thấy hóa đơn')
-  const lines = allDetails().filter((d) => d.invoiceId === invoiceId)
-  return {
-    ...inv,
-    employeeName: employeeName(inv.employeeId),
-    lines,
-    subtotal: lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0),
-    discountTotal: lines.reduce((s, l) => s + l.discount, 0),
+const toDetail = async (inv) => {
+  let customerName = null
+  if (inv.customerId) {
+    try {
+      customerName = (await client.get(`/api/customers/${inv.customerId}`)).fullName
+    } catch {
+      customerName = null
+    }
   }
-}
-
-// Tạo hóa đơn mới từ màn hình bán hàng. lines: [{productId, productName, quantity, unitPrice, discount}]
-export async function createInvoice({ branchId, customerId, customerName, employeeId, paymentMethod, lines }) {
-  await wait(500)
-  if (!lines.length) throw new Error('Giỏ hàng đang trống')
-  const b = BRANCH_IDS.indexOf(branchId) + 1
-  const prefix = `HD${b}`
-  const next = Math.max(0, ...allInvoices().filter((i) => i.branchId === branchId).map((i) => Number(i.invoiceId.slice(3)))) + 1
-  const invoiceId = `${prefix}${String(next).padStart(4, '0')}`
-
-  const details = lines.map((l) => ({
-    invoiceId,
+  const lines = (inv.items ?? []).map((l) => ({
     productId: l.productId,
     productName: l.productName,
     quantity: l.quantity,
-    unitPrice: l.unitPrice,
-    discount: l.discount ?? 0,
-    lineTotal: l.quantity * l.unitPrice - (l.discount ?? 0),
+    unitPrice: Number(l.unitPrice),
+    discount: Number(l.discount ?? 0),
+    lineTotal: Number(l.lineTotal),
   }))
-  const invoice = {
-    invoiceId,
-    branchId,
-    customerId: customerId ?? null,
-    customerName: customerName || 'Khách lẻ',
-    employeeId,
-    createdAt: new Date().toISOString(),
-    totalAmount: details.reduce((s, d) => s + d.lineTotal, 0),
-    paymentMethod,
-    status: 'DA_THANH_TOAN',
+  const subtotal = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)
+  return {
+    ...toInvoice(inv, customerName),
+    lines,
+    subtotal,
+    discountTotal: Math.max(0, subtotal - lines.reduce((s, l) => s + l.lineTotal, 0)),
   }
+}
 
-  commit({ invoices: [...created.invoices, invoice], details: [...created.details, ...details] })
-  return { ...invoice, employeeName: employeeName(employeeId) }
+export async function getInvoice(invoiceId) {
+  return toDetail(await client.get(`/api/invoices/${invoiceId}`))
+}
+
+// Hủy hóa đơn đã thanh toán: backend hoàn lại tồn kho và thu hồi điểm tích lũy.
+export async function cancelInvoice(invoiceId) {
+  return toDetail(await client.patch(`/api/invoices/${invoiceId}/cancel`))
+}
+
+// Thanh toán từ màn hình bán hàng. Backend tự lấy chi nhánh và nhân viên từ token, tự trừ kho và cộng điểm.
+// items: [{productId, quantity}]. customerId để trống nghĩa là khách lẻ.
+export async function checkout({ customerId, customerName, paymentMethod, items }) {
+  if (!items.length) throw new Error('Giỏ hàng đang trống')
+  const res = await client.post('/api/sales/checkout', {
+    customerId: customerId || null,
+    paymentMethod,
+    items: items.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+  })
+  return { ...toInvoice(res, customerName || undefined), loyaltyPointsEarned: res.loyaltyPointsEarned ?? 0 }
 }

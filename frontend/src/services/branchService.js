@@ -1,68 +1,78 @@
-import { BRANCHES } from '../config/branches'
+import { BRANCHES, getBranch } from '../config/branches'
+import { client } from '../api'
 import { getEmployees } from './employeeService'
 import { getInventorySummary, listLowStock } from './inventoryService'
 import { getEmployeeSales, getRevenueSeries, getRevenueSummary } from './statisticsService'
 
-// Dữ liệu chi nhánh. Backend chưa có API chi nhánh nên địa chỉ, số điện thoại là dữ liệu giả,
-// còn doanh thu, tồn kho, nhân viên được ghép từ các service giả khác.
-// Khi có API: thay thân các hàm bằng fetch(`${API_URL}/...`), giữ nguyên dữ liệu trả về.
-// Bám theo bảng ChiNhanh: branchId (MaChiNhanh), name (TenChiNhanh), address (DiaChi), phone (SDT).
+// Dữ liệu chi nhánh: địa chỉ, số điện thoại lấy từ backend (/api/branches);
+// doanh thu, tồn kho, nhân viên được ghép từ các service khác.
 
 const DAYS = 30
 
-const INFO = {
-  CN01: { address: '125 Nguyễn Huệ, P. Bến Nghé, Quận 1, TP.HCM', phone: '028 3822 1001', openedAt: '2021-03-15' },
-  CN02: { address: '58 Nguyễn Thị Thập, P. Tân Phong, Quận 7, TP.HCM', phone: '028 3775 2002', openedAt: '2022-08-20' },
-  CN03: { address: '210 Võ Văn Ngân, P. Linh Chiểu, TP. Thủ Đức, TP.HCM', phone: '028 3896 3003', openedAt: '2023-05-10' },
-}
-
 // Gộp thông tin cơ bản và số liệu 30 ngày gần nhất của một chi nhánh.
-async function buildOverview(branch) {
+// info: dữ liệu chi nhánh từ backend ({ address, phoneNumber, ... }).
+async function buildOverview(branch, info) {
   const [employees, revenue, inventory] = await Promise.all([
-    getEmployees({ branchId: branch.id }),
-    getRevenueSummary({ branchId: branch.id, days: DAYS }),
-    getInventorySummary({ branchId: branch.id }),
+    getEmployees({ branchId: branch.id }).catch(() => []),
+    getRevenueSummary({ branchId: branch.id, days: DAYS }).catch(() => ({ revenue: 0, revenueChangePercent: 0, orders: 0 })),
+    getInventorySummary({ branchId: branch.id }).catch(() => ({ lowStock: 0, outOfStock: 0, totalValue: 0 })),
   ])
-  const working = employees.filter((e) => e.status === 'WORKING')
+  const working = (employees ?? []).filter((e) => e.status === 'WORKING')
   return {
     branchId: branch.id,
     name: branch.name,
     short: branch.short,
-    ...INFO[branch.id],
+    address: info?.address ?? '',
+    phone: info?.phoneNumber ?? '',
     manager: working.find((e) => e.position === 'Quản lý chi nhánh')?.employeeName ?? 'Chưa có quản lý',
     employeeCount: working.length,
-    revenue: revenue.revenue,
-    revenueChangePercent: revenue.revenueChangePercent,
-    orders: revenue.orders,
-    lowStock: inventory.lowStock,
-    outOfStock: inventory.outOfStock,
-    stockValue: inventory.totalValue,
+    revenue: revenue.revenue ?? 0,
+    revenueChangePercent: revenue.revenueChangePercent ?? 0,
+    orders: revenue.orders ?? 0,
+    lowStock: inventory.lowStock ?? 0,
+    outOfStock: inventory.outOfStock ?? 0,
+    stockValue: inventory.totalValue ?? 0,
   }
 }
 
-// Danh sách ba chi nhánh kèm số liệu tổng quan.
+// Danh sách 3 chi nhánh cố định của hệ thống kèm số liệu tổng quan.
 export async function getBranchList() {
-  return Promise.all(BRANCHES.map(buildOverview))
+  const infos = await client.get('/api/branches').catch(() => [])
+  return Promise.all(
+    BRANCHES.map((b) => {
+      const info = (infos ?? []).find(
+        (i) =>
+          i.branchId?.toLowerCase() === b.id.toLowerCase() ||
+          i.branchId?.replace(/^CN0+/, 'CN').toLowerCase() === b.id.replace(/^CN0+/, 'CN').toLowerCase()
+      )
+      return buildOverview(b, info)
+    })
+  )
 }
 
 // Chi tiết một chi nhánh: tổng quan, doanh thu 14 ngày, nhân viên, hàng cần chú ý, doanh số nhân viên.
 export async function getBranchDetail(branchId) {
-  const branch = BRANCHES.find((b) => b.id === branchId)
-  if (!branch) throw new Error('Không tìm thấy chi nhánh')
+  const info = await client.get(`/api/branches/${branchId}`).catch(() => null)
+  const meta = getBranch(branchId)
+  const branch = {
+    id: branchId,
+    name: info?.branchName || meta.name,
+    short: meta.short || info?.branchName || branchId,
+  }
 
   const [overview, series, employees, lowStock, sales] = await Promise.all([
-    buildOverview(branch),
-    getRevenueSeries({ branchId, days: 14 }),
-    getEmployees({ branchId }),
-    listLowStock({ branchId }),
-    getEmployeeSales({ branchId, days: DAYS }),
+    buildOverview(branch, info),
+    getRevenueSeries({ branchId, days: 14 }).catch(() => []),
+    getEmployees({ branchId }).catch(() => []),
+    listLowStock({ branchId }).catch(() => []),
+    getEmployeeSales({ branchId, days: DAYS }).catch(() => []),
   ])
 
   return {
     ...overview,
-    revenueSeries: series,
-    employees: employees.filter((e) => e.status === 'WORKING'),
-    lowStockItems: lowStock.slice(0, 6),
-    topSellers: sales.slice(0, 3),
+    revenueSeries: series ?? [],
+    employees: (employees ?? []).filter((e) => e.status === 'WORKING'),
+    lowStockItems: (lowStock ?? []).slice(0, 6),
+    topSellers: (sales ?? []).slice(0, 3),
   }
 }

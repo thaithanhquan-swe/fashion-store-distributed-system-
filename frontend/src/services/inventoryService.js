@@ -1,13 +1,11 @@
-import { getBranch } from '../config/branches'
+import { BRANCHES, getBranch } from '../config/branches'
 import { STOCK_STATUS } from '../utils/format'
-import { INVENTORY, PRODUCTS, wait } from './mockData'
-import { loadMock, saveMock } from './mockStore'
+import { client, getAllPages } from '../api'
+import { getProducts } from './productService'
 
-// Backend chưa có API tồn kho, nên các hàm dưới đây trả dữ liệu giả.
-// Khi có API, chỉ thay phần thân hàm, trang giao diện giữ nguyên.
-
-const MOCK_DELAY = 250
-const PRODUCT_MAP = new Map(PRODUCTS.map((p) => [p.productId, p]))
+// Tồn kho lấy từ backend (/api/inventory).
+// Backend chỉ trả { branchId, productId, quantity, minimumStock, updatedAt, lowStock },
+// nên tên sản phẩm, danh mục, giá... được ghép từ danh sách sản phẩm.
 
 // Sắp hết khi số lượng tồn <= mức tồn tối thiểu, hết hàng khi không còn sản phẩm.
 const stockStatusOf = (quantity, minQuantity) => {
@@ -16,28 +14,66 @@ const stockStatusOf = (quantity, minQuantity) => {
   return STOCK_STATUS.AVAILABLE
 }
 
-// Lưu vào localStorage (mockStore) để bán hàng ở màn POS và nhập kho không mất khi F5.
-let stockRows = loadMock('inventory', INVENTORY.map((row) => ({ ...row })))
-const saveStock = () => saveMock('inventory', stockRows)
+const toRow = (row, product) => ({
+  key: `${row.branchId}-${row.productId}`,
+  branchId: row.branchId,
+  branchName: getBranch(row.branchId)?.name ?? row.branchId,
+  productId: row.productId,
+  productName: product?.productName ?? row.productId,
+  category: product?.category ?? '',
+  brand: product?.brand ?? '',
+  color: product?.color ?? '',
+  size: product?.size ?? '',
+  price: product?.price ?? 0,
+  quantity: row.quantity,
+  minQuantity: row.minimumStock,
+  updatedAt: row.updatedAt,
+  stockStatus: stockStatusOf(row.quantity, row.minimumStock),
+})
 
-const toRow = (row) => {
-  const product = PRODUCT_MAP.get(row.productId)
-  return {
-    key: `${row.branchId}-${row.productId}`,
-    branchId: row.branchId,
-    branchName: getBranch(row.branchId)?.name ?? row.branchId,
-    productId: row.productId,
-    productName: product?.productName ?? row.productId,
-    category: product?.category ?? '',
-    brand: product?.brand ?? '',
-    color: product?.color ?? '',
-    size: product?.size ?? '',
-    price: product?.price ?? 0,
-    quantity: row.quantity,
-    minQuantity: row.minQuantity,
-    updatedAt: row.updatedAt,
-    stockStatus: stockStatusOf(row.quantity, row.minQuantity),
-  }
+// Một màn hình có thể gọi nhiều hàm cùng lúc; giữ kết quả 2 giây để không gọi lại API nhiều lần.
+const CACHE_MS = 2000
+let cache = null
+
+async function loadBranchRows(branchId) {
+  const [products, branchRows] = await Promise.all([
+    getProducts(),
+    getAllPages(branchId ? `/api/inventory/branches/${branchId}` : '/api/inventory').catch(() =>
+      getAllPages('/api/inventory').catch(() => []),
+    ),
+  ])
+  const productMap = new Map(products.map((p) => [p.productId, p]))
+  return (branchRows ?? []).map((row) => toRow(row, productMap.get(row.productId)))
+}
+
+async function loadAllRows() {
+  if (cache && Date.now() - cache.at < CACHE_MS) return cache.promise
+  const promise = (async () => {
+    const products = await getProducts()
+    const productMap = new Map(products.map((p) => [p.productId, p]))
+
+    const settled = await Promise.allSettled(
+      BRANCHES.map((b) => getAllPages(`/api/inventory/branches/${b.id}`))
+    )
+    const perBranch = settled
+      .filter((res) => res.status === 'fulfilled')
+      .flatMap((res) => res.value)
+
+    if (perBranch.length === 0) {
+      try {
+        const current = await getAllPages('/api/inventory')
+        return current.map((row) => toRow(row, productMap.get(row.productId)))
+      } catch {
+        return []
+      }
+    }
+    return perBranch.map((row) => toRow(row, productMap.get(row.productId)))
+  })()
+  cache = { at: Date.now(), promise }
+  promise.catch(() => {
+    if (cache?.promise === promise) cache = null
+  })
+  return promise
 }
 
 const matches = (row, keyword) => {
@@ -52,10 +88,10 @@ const matches = (row, keyword) => {
 
 // Danh sách tồn kho. branchId = null nghĩa là xem toàn chuỗi (Admin).
 export async function listInventory({ branchId = null, keyword = '', stockStatus = '' } = {}) {
-  await wait(MOCK_DELAY)
   const kw = keyword.trim().toLowerCase()
-  return stockRows.map(toRow).filter((row) => {
-    if (branchId && row.branchId !== branchId) return false
+  const rows = branchId ? await loadBranchRows(branchId) : await loadAllRows()
+  return rows.filter((row) => {
+    if (branchId && row.branchId !== branchId && getBranch(row.branchId)?.id !== getBranch(branchId)?.id) return false
     if (stockStatus && row.stockStatus !== stockStatus) return false
     return matches(row, kw)
   })
@@ -72,39 +108,22 @@ export async function listLowStock({ branchId = null, keyword = '' } = {}) {
     })
 }
 
-// Nhập thêm hàng cho một mã sản phẩm tại chi nhánh.
-export async function adjustStock({ branchId, productId, quantity }) {
-  await wait(MOCK_DELAY)
-  const row = stockRows.find((item) => item.branchId === branchId && item.productId === productId)
-  if (!row) {
-    throw new Error('Không tìm thấy mã sản phẩm trong tồn kho của chi nhánh')
-  }
+// Nhập thêm hàng cho một mã sản phẩm. Backend luôn nhập vào chi nhánh của tài khoản đang đăng nhập
+// (Admin và Manager mới được nhập), nên tham số branchId chỉ để giữ chữ ký hàm cũ.
+export async function adjustStock({ productId, quantity }) {
   if (!Number.isFinite(quantity) || quantity <= 0) {
     throw new Error('Số lượng nhập phải lớn hơn 0')
   }
-  row.quantity += quantity
-  row.updatedAt = new Date().toISOString()
-  saveStock()
-  return toRow(row)
+  const saved = await client.post('/api/inventory/import', { productId, quantity })
+  cache = null
+  const products = await getProducts()
+  return toRow(saved, products.find((p) => p.productId === productId))
 }
 
-// Trừ kho khi bán hàng (màn POS). items: [{productId, quantity}]. Kiểm tra đủ hàng trước, không đủ thì không trừ mã nào.
-export async function consumeStock({ branchId, items }) {
-  await wait(MOCK_DELAY)
-  for (const item of items) {
-    const row = stockRows.find((r) => r.branchId === branchId && r.productId === item.productId)
-    if (!row || row.quantity < item.quantity) {
-      const name = PRODUCT_MAP.get(item.productId)?.productName ?? item.productId
-      throw new Error(`Không đủ hàng trong kho: ${name}`)
-    }
-  }
-  const now = new Date().toISOString()
-  for (const item of items) {
-    const row = stockRows.find((r) => r.branchId === branchId && r.productId === item.productId)
-    row.quantity -= item.quantity
-    row.updatedAt = now
-  }
-  saveStock()
+// Việc trừ kho do backend tự làm khi thanh toán (POST /api/sales/checkout), nên không cần trừ ở frontend.
+// Hàm này giữ lại tạm để màn thanh toán cũ chưa lỗi; cụm E sẽ xóa cùng lúc với việc sửa màn thanh toán.
+export async function consumeStock() {
+  cache = null
 }
 
 // Tổng quan tồn kho theo chi nhánh, dùng cho thẻ số liệu và tổng quan Admin.
