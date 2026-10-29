@@ -35,15 +35,39 @@ const toRow = (row, product) => ({
 const CACHE_MS = 2000
 let cache = null
 
+async function loadBranchRows(branchId) {
+  const [products, branchRows] = await Promise.all([
+    getProducts(),
+    getAllPages(branchId ? `/api/inventory/branches/${branchId}` : '/api/inventory').catch(() =>
+      getAllPages('/api/inventory').catch(() => []),
+    ),
+  ])
+  const productMap = new Map(products.map((p) => [p.productId, p]))
+  return (branchRows ?? []).map((row) => toRow(row, productMap.get(row.productId)))
+}
+
 async function loadAllRows() {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.promise
   const promise = (async () => {
-    const [products, ...perBranch] = await Promise.all([
-      getProducts(),
-      ...BRANCHES.map((b) => getAllPages(`/api/inventory/branches/${b.id}`)),
-    ])
+    const products = await getProducts()
     const productMap = new Map(products.map((p) => [p.productId, p]))
-    return perBranch.flat().map((row) => toRow(row, productMap.get(row.productId)))
+
+    const settled = await Promise.allSettled(
+      BRANCHES.map((b) => getAllPages(`/api/inventory/branches/${b.id}`))
+    )
+    const perBranch = settled
+      .filter((res) => res.status === 'fulfilled')
+      .flatMap((res) => res.value)
+
+    if (perBranch.length === 0) {
+      try {
+        const current = await getAllPages('/api/inventory')
+        return current.map((row) => toRow(row, productMap.get(row.productId)))
+      } catch {
+        return []
+      }
+    }
+    return perBranch.map((row) => toRow(row, productMap.get(row.productId)))
   })()
   cache = { at: Date.now(), promise }
   promise.catch(() => {
@@ -65,9 +89,9 @@ const matches = (row, keyword) => {
 // Danh sách tồn kho. branchId = null nghĩa là xem toàn chuỗi (Admin).
 export async function listInventory({ branchId = null, keyword = '', stockStatus = '' } = {}) {
   const kw = keyword.trim().toLowerCase()
-  const rows = await loadAllRows()
+  const rows = branchId ? await loadBranchRows(branchId) : await loadAllRows()
   return rows.filter((row) => {
-    if (branchId && row.branchId !== branchId) return false
+    if (branchId && row.branchId !== branchId && getBranch(row.branchId)?.id !== getBranch(branchId)?.id) return false
     if (stockStatus && row.stockStatus !== stockStatus) return false
     return matches(row, kw)
   })

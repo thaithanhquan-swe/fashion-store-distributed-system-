@@ -42,11 +42,14 @@ export async function getTopProducts({ branchId = null, days = 30, limit = 10, s
 // Doanh thu từng ngày theo chi nhánh, dùng để so sánh giữa các chi nhánh.
 // Backend chưa có endpoint ma trận, nên gọi doanh thu của từng chi nhánh rồi ghép theo ngày.
 export async function getRevenueMatrix({ days = 14 } = {}) {
-  const results = await Promise.all(BRANCHES.map((b) => fetchRevenue(b.id, days)))
-  return results[0].series.map((day, index) => {
+  const settled = await Promise.allSettled(BRANCHES.map((b) => fetchRevenue(b.id, days)))
+  const results = settled.map((r) => (r.status === 'fulfilled' ? r.value : { series: [] }))
+  const firstSeries = results.find((r) => Array.isArray(r.series) && r.series.length > 0)?.series || []
+  if (firstSeries.length === 0) return []
+  return firstSeries.map((day, index) => {
     const row = { date: day.date, dateLabel: day.dateLabel, total: 0 }
     BRANCHES.forEach((b, i) => {
-      const value = Number(results[i].series[index]?.revenue ?? 0)
+      const value = Number(results[i]?.series?.[index]?.revenue ?? 0)
       row[b.id] = value
       row.total += value
     })

@@ -1,4 +1,4 @@
-import { BRANCHES } from '../config/branches'
+import { BRANCHES, getBranch } from '../config/branches'
 import { client } from '../api'
 import { getEmployees } from './employeeService'
 import { getInventorySummary, listLowStock } from './inventoryService'
@@ -13,11 +13,11 @@ const DAYS = 30
 // info: dữ liệu chi nhánh từ backend ({ address, phoneNumber, ... }).
 async function buildOverview(branch, info) {
   const [employees, revenue, inventory] = await Promise.all([
-    getEmployees({ branchId: branch.id }),
-    getRevenueSummary({ branchId: branch.id, days: DAYS }),
-    getInventorySummary({ branchId: branch.id }),
+    getEmployees({ branchId: branch.id }).catch(() => []),
+    getRevenueSummary({ branchId: branch.id, days: DAYS }).catch(() => ({ revenue: 0, revenueChangePercent: 0, orders: 0 })),
+    getInventorySummary({ branchId: branch.id }).catch(() => ({ lowStock: 0, outOfStock: 0, totalValue: 0 })),
   ])
-  const working = employees.filter((e) => e.status === 'WORKING')
+  const working = (employees ?? []).filter((e) => e.status === 'WORKING')
   return {
     branchId: branch.id,
     name: branch.name,
@@ -26,40 +26,53 @@ async function buildOverview(branch, info) {
     phone: info?.phoneNumber ?? '',
     manager: working.find((e) => e.position === 'Quản lý chi nhánh')?.employeeName ?? 'Chưa có quản lý',
     employeeCount: working.length,
-    revenue: revenue.revenue,
-    revenueChangePercent: revenue.revenueChangePercent,
-    orders: revenue.orders,
-    lowStock: inventory.lowStock,
-    outOfStock: inventory.outOfStock,
-    stockValue: inventory.totalValue,
+    revenue: revenue.revenue ?? 0,
+    revenueChangePercent: revenue.revenueChangePercent ?? 0,
+    orders: revenue.orders ?? 0,
+    lowStock: inventory.lowStock ?? 0,
+    outOfStock: inventory.outOfStock ?? 0,
+    stockValue: inventory.totalValue ?? 0,
   }
 }
 
-// Danh sách ba chi nhánh kèm số liệu tổng quan.
+// Danh sách 3 chi nhánh cố định của hệ thống kèm số liệu tổng quan.
 export async function getBranchList() {
-  const infos = await client.get('/api/branches')
-  return Promise.all(BRANCHES.map((b) => buildOverview(b, infos.find((i) => i.branchId === b.id))))
+  const infos = await client.get('/api/branches').catch(() => [])
+  return Promise.all(
+    BRANCHES.map((b) => {
+      const info = (infos ?? []).find(
+        (i) =>
+          i.branchId?.toLowerCase() === b.id.toLowerCase() ||
+          i.branchId?.replace(/^CN0+/, 'CN').toLowerCase() === b.id.replace(/^CN0+/, 'CN').toLowerCase()
+      )
+      return buildOverview(b, info)
+    })
+  )
 }
 
 // Chi tiết một chi nhánh: tổng quan, doanh thu 14 ngày, nhân viên, hàng cần chú ý, doanh số nhân viên.
 export async function getBranchDetail(branchId) {
-  const branch = BRANCHES.find((b) => b.id === branchId)
-  if (!branch) throw new Error('Không tìm thấy chi nhánh')
+  const info = await client.get(`/api/branches/${branchId}`).catch(() => null)
+  const meta = getBranch(branchId)
+  const branch = {
+    id: branchId,
+    name: info?.branchName || meta.name,
+    short: meta.short || info?.branchName || branchId,
+  }
 
-  const info = await client.get(`/api/branches/${branchId}`)
   const [overview, series, employees, lowStock, sales] = await Promise.all([
     buildOverview(branch, info),
-    getRevenueSeries({ branchId, days: 14 }),
-    getEmployees({ branchId }),
-    listLowStock({ branchId }),
-    getEmployeeSales({ branchId, days: DAYS }),
+    getRevenueSeries({ branchId, days: 14 }).catch(() => []),
+    getEmployees({ branchId }).catch(() => []),
+    listLowStock({ branchId }).catch(() => []),
+    getEmployeeSales({ branchId, days: DAYS }).catch(() => []),
   ])
 
   return {
     ...overview,
-    revenueSeries: series,
-    employees: employees.filter((e) => e.status === 'WORKING'),
-    lowStockItems: lowStock.slice(0, 6),
-    topSellers: sales.slice(0, 3),
+    revenueSeries: series ?? [],
+    employees: (employees ?? []).filter((e) => e.status === 'WORKING'),
+    lowStockItems: (lowStock ?? []).slice(0, 6),
+    topSellers: (sales ?? []).slice(0, 3),
   }
 }
