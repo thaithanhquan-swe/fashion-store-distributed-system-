@@ -196,14 +196,22 @@ public class DashboardService {
         return days;
     }
 
+    // Chỉ chấp nhận 3 mã chi nhánh chuẩn: CN1, CN2, CN3
+    private static final java.util.Set<String> VALID_BRANCH_CODES =
+            java.util.Set.of("CN1", "CN2", "CN3");
+
     private String resolveManagerBranchId(Account account, String branchIdParam) {
         if (account.getRole() == Role.ADMIN) {
             if (branchIdParam != null && !branchIdParam.isBlank()) {
-                return branchIdParam.trim();
+                String trimmed = branchIdParam.trim().toUpperCase(java.util.Locale.ROOT);
+                if (!VALID_BRANCH_CODES.contains(trimmed)) {
+                    throw new AppException(ErrorCode.BRANCH_INVALID_ID);
+                }
+                return trimmed;
             }
             return branchRepository.findFirstByActiveTrueOrderByBranchIdAsc()
                     .map(Branch::getBranchId)
-                    .orElse("CN01");
+                    .orElse("CN1");
         }
 
         if (account.getRole() == Role.MANAGER) {

@@ -24,6 +24,10 @@ public class BranchService {
     BranchRepository branchRepository;
     BranchMapper branchMapper;
 
+    // Chỉ chấp nhận 3 mã chi nhánh chuẩn: CN1, CN2, CN3 (khớp PDF filter MACN='CN1')
+    private static final java.util.Set<String> VALID_BRANCH_CODES =
+            java.util.Set.of("CN1", "CN2", "CN3");
+
     @Transactional(readOnly = true)
     public List<BranchResponse> getAll(Boolean active) {
         List<Branch> branches;
@@ -40,41 +44,26 @@ public class BranchService {
         if (branchId == null || branchId.isBlank()) {
             throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
         }
-        Branch branch = findBranch(branchId.trim());
+        String trimmed = branchId.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!VALID_BRANCH_CODES.contains(trimmed)) {
+            throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
+        }
+        Branch branch = branchRepository.findById(trimmed)
+                .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND));
         return branchMapper.toResponse(branch);
     }
 
-    private Branch findBranch(String branchId) {
-        java.util.Optional<Branch> branch = branchRepository.findById(branchId);
-        if (branch.isPresent()) {
-            return branch.get();
-        }
-        if (branchId.matches("(?i)CN\\d+")) {
-            try {
-                int num = Integer.parseInt(branchId.substring(2));
-                for (String alias : java.util.List.of(
-                        String.format(java.util.Locale.ROOT, "CN%03d", num),
-                        String.format(java.util.Locale.ROOT, "CN%02d", num),
-                        String.format(java.util.Locale.ROOT, "CN%d", num))) {
-                    if (!alias.equalsIgnoreCase(branchId)) {
-                        java.util.Optional<Branch> found = branchRepository.findById(alias);
-                        if (found.isPresent()) {
-                            return found.get();
-                        }
-                    }
-                }
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
-    }
-
     @Transactional(isolation = Isolation.SERIALIZABLE)
-    public BranchResponse create(CreateBranchRequest request) {
-        String branchId = GeneratedId.next("CN", branchRepository.findAllByBranchIdStartingWith("CN")
-                .stream().map(Branch::getBranchId).toList(), ErrorCode.BRANCH_ID_CAPACITY_EXCEEDED);
-
-        Branch branch = branchMapper.toEntity(request, branchId);
+    public BranchResponse create(CreateBranchRequest request, String branchId) {
+        // Chỉ cho phép tạo 3 chi nhánh cố định CN1/CN2/CN3
+        String trimmed = branchId != null ? branchId.trim().toUpperCase(java.util.Locale.ROOT) : "";
+        if (!VALID_BRANCH_CODES.contains(trimmed)) {
+            throw new AppException(ErrorCode.BRANCH_INVALID_ID);
+        }
+        if (branchRepository.existsById(trimmed)) {
+            throw new AppException(ErrorCode.BRANCH_ALREADY_EXISTS);
+        }
+        Branch branch = branchMapper.toEntity(request, trimmed);
         Branch savedBranch = branchRepository.save(branch);
         return branchMapper.toResponse(savedBranch);
     }

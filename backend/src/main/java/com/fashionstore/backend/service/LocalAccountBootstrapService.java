@@ -76,9 +76,9 @@ public class LocalAccountBootstrapService {
         String branchId = branchRepository.findFirstByActiveTrueOrderByBranchIdAsc()
                 .map(Branch::getBranchId)
                 .orElseGet(() -> {
-                    log.info("No active branch found in database. Auto-creating default branch 'Local Demo Branch'...");
+                    log.info("No active branch found in database. Auto-creating default branch CN1...");
                     return branchService.create(
-                            new CreateBranchRequest("Local Demo Branch", null, null)).branchId();
+                            new CreateBranchRequest("Store Quận 1", null, null), "CN1").branchId();
                 });
 
         String employeeId = employeeService.create(

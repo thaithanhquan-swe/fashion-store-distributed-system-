@@ -59,10 +59,11 @@ public class BranchController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN')")
-    @Operation(summary = "Tạo chi nhánh")
+    @Operation(summary = "Tạo chi nhánh (chỉ CN1, CN2, CN3)")
     public ResponseEntity<ApiResponse<BranchResponse>> create(
+            @RequestParam String branchId,
             @Valid @RequestBody CreateBranchRequest request) {
-        BranchResponse result = branchService.create(request);
+        BranchResponse result = branchService.create(request, branchId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.<BranchResponse>builder()
                         .message("Tạo chi nhánh thành công")

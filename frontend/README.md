@@ -152,7 +152,7 @@ Cần component mới dùng chung thì báo Khang, đừng tự sửa `component
 ## Gọi dữ liệu
 
 - Trang **không gọi `fetch`**. Chỉ gọi hàm trong `src/services/`.
-- Khi backend chưa có API, hàm trong service trả dữ liệu giả (xem `authService.js` làm mẫu), sau này đổi sang gọi API mà trang không phải sửa.
+- 10/11 service đã gọi API thật qua `src/api/client.js` (Bearer + refresh token + gom phân trang); chỉ `siteService` còn mock. Khi thêm service mới, giữ nguyên shape dữ liệu trả về để trang không phải sửa.
 - Tiền dùng `formatMoney(n)`, ngày dùng `formatDate`, `formatDateTime` từ `utils/format.js`.
 - Thông tin người đăng nhập: `const { user } = useAuth()` gồm `name`, `role`, `branchId`, `employeeId`.
 
@@ -165,7 +165,7 @@ Cần component mới dùng chung thì báo Khang, đừng tự sửa `component
 ## Quy ước làm việc
 
 - Mỗi trang một file, tên viết hoa chữ đầu và kết thúc bằng `Page` (`InvoiceListPage.jsx`).
-- Mỗi người làm trên nhánh riêng (`feature/pos`, `feature/inventory`...), xong mới gộp vào `main`. Pull `main` trước khi bắt đầu và trước khi gộp.
+- Mỗi người làm trên nhánh riêng (`feature/pos`, `feature/inventory`...), xong mới gộp vào `develop` qua Pull Request. Pull `develop` trước khi bắt đầu và trước khi gộp.
 - Mọi bảng và danh sách có đủ trạng thái đang tải, rỗng và lỗi.
 - Văn bản trên giao diện bằng tiếng Việt, dữ liệu giả cũng bằng tiếng Việt.
 - Không viết mã màu rời, không thêm thư viện khi chưa báo.

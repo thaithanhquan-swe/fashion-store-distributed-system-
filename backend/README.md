@@ -44,22 +44,32 @@ token để gọi `GET /api/auth/me` lấy tài khoản hiện tại hoặc `PUT
 Yêu cầu JDK 21 và Microsoft SQL Server. Xem hướng dẫn chi tiết từng bước tại:
 👉 [HUONG_DAN_CHAY_BACKEND.md](./HUONG_DAN_CHAY_BACKEND.md)
 
-### Cách 1: Cấu hình trực tiếp trong `application.properties` (Khuyên dùng)
+### Cách 1: Copy `application-local.properties` (Khuyên dùng)
 
-1. Mở file `src/main/resources/application.properties` và điền mật khẩu tài khoản `sa` của SQL Server máy bạn (`spring.datasource.password`) cùng chuỗi khóa JWT (`jwt.signerKey`, tối thiểu 64 ký tự).
+> `application.properties` đã bị gitignore và **không có trong repo**. File mẫu được track là
+> `application-local.properties`; Spring Boot chỉ đọc file `-local` khi bật profile `local`.
+
+1. Copy file mẫu và sửa cấu hình:
+   ```powershell
+   cd backend\src\main\resources
+   Copy-Item application-local.properties application.properties
+   ```
+   Điền `spring.datasource.password` (mật khẩu `sa`), `jwt.signerKey` (≥ 64 ký tự) và
+   `spring.datasource.url` đúng database của máy (`Fashion_Central` / `Fashion_Q1` / ...).
 2. Chạy backend bằng Maven Wrapper trên PowerShell:
    ```powershell
    cd backend
    .\mvnw.cmd spring-boot:run
    ```
 
-### Cách 2: Chạy bằng biến môi trường trên PowerShell
+### Cách 2: Dùng profile `local` + biến môi trường trên PowerShell
 
 ```powershell
 cd backend
+$env:SPRING_PROFILES_ACTIVE = "local"
+$env:SPRING_DATASOURCE_URL = "jdbc:sqlserver://localhost:1433;databaseName=Fashion_Q1;encrypt=true;trustServerCertificate=true"
 $env:SPRING_DATASOURCE_PASSWORD = "<mat-khau-sql-server>"
 $env:JWT_SIGNER_KEY = "<chuoi-khoa-bi-mat-jwt-hs512-toi-thieu-64-bytes>"
-$env:CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -69,7 +79,8 @@ $env:CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 
 ### Tài khoản local có sẵn
 
-Profile mặc định `local` tự khởi tạo 3 tài khoản demo khi backend chạy:
+Bootstrap tài khoản chạy ở **mọi profile** (bỏ `@Profile("local")` từ `e2b0e3f`); bật/tắt bằng
+`app.bootstrap-accounts.enabled` (mặc định `true`). Khi DB trống, backend tạo 3 tài khoản demo:
 
 | Tên đăng nhập | Vai trò | Mật khẩu | Chi nhánh |
 | --- | --- | --- | --- |

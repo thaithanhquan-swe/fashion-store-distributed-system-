@@ -39,6 +39,10 @@ public class InventoryService {
     BranchRepository branchRepository;
     ProductRepository productRepository;
 
+    // Chỉ chấp nhận 3 mã chi nhánh chuẩn: CN1, CN2, CN3
+    private static final java.util.Set<String> VALID_BRANCH_CODES =
+            java.util.Set.of("CN1", "CN2", "CN3");
+
     @Transactional(readOnly = true)
     public PageResponse<InventoryResponse> getCurrentBranch(String username, Pageable pageable) {
         Branch branch = currentBranch(findAccount(username));
@@ -56,9 +60,10 @@ public class InventoryService {
 
     @Transactional(readOnly = true)
     public PageResponse<InventoryResponse> getBranch(String username, String branchId, Pageable pageable) {
+        String trimmed = validateBranchId(branchId);
         Account account = findAccount(username);
         Branch ownBranch = currentBranch(account);
-        Branch targetBranch = findBranch(branchId);
+        Branch targetBranch = findBranch(trimmed);
         if (!ownBranch.getBranchId().equalsIgnoreCase(targetBranch.getBranchId())
                 && account.getRole() != Role.ADMIN && account.getRole() != Role.MANAGER) {
             throw new AppException(ErrorCode.ACCESS_DENIED);
@@ -136,28 +141,20 @@ public class InventoryService {
     }
 
     private Branch findBranch(String branchId) {
-        java.util.Optional<Branch> branch = branchRepository.findById(branchId);
-        if (branch.isPresent()) {
-            return branch.get();
+        String trimmed = validateBranchId(branchId);
+        return branchRepository.findById(trimmed)
+                .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND));
+    }
+
+    private String validateBranchId(String branchId) {
+        if (branchId == null || branchId.isBlank()) {
+            throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
         }
-        if (branchId.matches("(?i)CN\\d+")) {
-            try {
-                int num = Integer.parseInt(branchId.substring(2));
-                for (String alias : java.util.List.of(
-                        String.format(java.util.Locale.ROOT, "CN%03d", num),
-                        String.format(java.util.Locale.ROOT, "CN%02d", num),
-                        String.format(java.util.Locale.ROOT, "CN%d", num))) {
-                    if (!alias.equalsIgnoreCase(branchId)) {
-                        java.util.Optional<Branch> found = branchRepository.findById(alias);
-                        if (found.isPresent()) {
-                            return found.get();
-                        }
-                    }
-                }
-            } catch (NumberFormatException ignored) {
-            }
+        String trimmed = branchId.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!VALID_BRANCH_CODES.contains(trimmed)) {
+            throw new AppException(ErrorCode.BRANCH_INVALID_ID);
         }
-        throw new AppException(ErrorCode.BRANCH_NOT_FOUND);
+        return trimmed;
     }
 
     private void requireProduct(String productId) {

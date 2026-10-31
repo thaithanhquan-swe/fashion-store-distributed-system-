@@ -8,6 +8,31 @@ Phạm vi hiện tại của nhóm: **làm trước phần database, backend, fr
 (replication, linked server, stored procedure phân tán) làm sau, nhưng các quyết định dưới
 đây cần chốt sớm vì sửa lại schema sau này rất tốn công.
 
+> ## ⚠️ CẬP NHẬT 2026-10-29 (đối chiếu commit `e2b0e3f`)
+>
+> File này ban đầu viết khi backend/frontend còn sơ khai. **Trạng thái hiện tại đã khác nhiều**;
+> nguồn sự thật duy nhất là [`docs/PROJECT_STATUS.md`](PROJECT_STATUS.md). Đọc mục đó trước.
+>
+> **Đã xong từ lúc viết file này:**
+> - Backend: 12 controller, 50 endpoint, 73 test pass; đã có entity `TonKho`, `ChiTietHoaDon`,
+>   API tồn kho, bán hàng (`POST /api/sales/checkout`), hóa đơn, dashboard 3 role, thống kê 5 endpoint,
+>   `branchId` trong `LoginResponse`, CORS 5173.
+> - Frontend: đủ 30 file trang (27 route menu + 7 route chi tiết); **10/11 service gọi API thật**
+>   qua `src/api/client.js` (Bearer + refresh token + gom phân trang); chỉ `siteService` còn mock.
+> - Database: đã có `database/Fashion_Central.sql` (8 bảng + `distributed_user` + `sp_DongBoSanPham`).
+> - Tài liệu: `docs/setup.md` đã viết lại thành runbook 4 máy; có `docs/PROJECT_STATUS.md`.
+>
+> **Vẫn còn nguyên (phần phân tán ~0%):** publication/subscription, linked server, trigger,
+> `SyncQueue`, SP `UNION` xuyên site, seed dữ liệu, định danh toàn cục, UTF-8 cho file SQL.
+>
+> **Phát sinh mới sau khi pull:**
+> - `application.properties` bị gitignore và **không còn trong repo**; chỉ có
+>   `application-local.properties`, mà Spring Boot chỉ đọc khi bật profile `local`.
+> - Mã chi nhánh lệch: FE hardcode `CN001/CN002/CN003` + "Store Quận 3"; đề bài và `AGENTS.md`
+>   dùng `CN01/CN02/CN03` (Quận 1 / Quận 7 / Thủ Đức). Alias mới chỉ có ở `BranchService`/`InventoryService`.
+> - `sp_DongBoSanPham` dùng tên 3 phần `Fashion_Q1.dbo.*` (cần linked server tên `Fashion_Q1`),
+>   lệch quy ước `SITE_Q1`; chỉ đồng bộ cột `TenSanPham`.
+
 ---
 
 ## 1. Mẫu giảng viên yêu cầu gì
@@ -42,11 +67,12 @@ Phạm vi hiện tại của nhóm: **làm trước phần database, backend, fr
 | 8 | SP tìm kiếm / sửa / xoá xuyên server | Chưa có | 100% |
 | 9 | Trigger | Chưa có | 100% |
 | 10 | Tài liệu thiết kế | Có mục tiêu nghiệp vụ, kiến trúc, phân quyền. **Thiếu**: ERD, lược đồ liên kết thực thể, quan hệ giữa các bảng, **sơ đồ định vị W/E/D/R/H/L**, sơ đồ phân mảnh vẽ tay, thiết kế vật lí tại các trạm, file kịch bản, phân tích chức năng theo vị trí | ~55% |
-| 11a | Chức năng nghiệp vụ (backend) | Đã có: auth và phân quyền, nhân viên, tài khoản, chi nhánh, sản phẩm, khách hàng. **Thiếu**: tồn kho, bán hàng, chi tiết hóa đơn, thống kê, trạng thái site, và các API danh sách (GET) cho nhân viên / tài khoản / chi nhánh | ~55% |
-| 11b | Giao diện (frontend) | Xem mục 5 bên dưới | ~65% |
+| 11a | Chức năng nghiệp vụ (backend) | ✅ **Đã xong phần ứng dụng**: auth + phân quyền, nhân viên, tài khoản, chi nhánh, sản phẩm, khách hàng, tồn kho, bán hàng, chi tiết hóa đơn, hóa đơn, dashboard 3 role, thống kê. **Còn thiếu**: trạng thái site, API tổng hợp phân tán, idempotency checkout, cấu hình theo máy | ~90% |
+| 11b | Giao diện (frontend) | ✅ 30 file trang, đủ 27 route menu + 7 route chi tiết; 10/11 service gọi API thật. Xem mục 5 bên dưới | ~95% |
 
-**Tổng: khoảng 38% hoàn thành nếu tính cả phần phân tán (vì phân tán = 0%). Riêng phần
-database + backend + frontend: khoảng 60%.**
+**Cập nhật 2026-10-29: khoảng 50–55% nếu tính cả phần phân tán (phân tán vẫn ~0%).
+Riêng database + backend + frontend: khoảng 85–88%.** Con số 38% / 60% bên dưới là mốc lịch sử
+lúc mới viết file, giữ lại để đối chiếu.
 
 ---
 
@@ -54,34 +80,34 @@ database + backend + frontend: khoảng 60%.**
 
 ### A. Phải quyết định trước khi làm tiếp (sửa sau rất tốn)
 
-| # | Vấn đề | Bằng chứng | Tác động |
+| # | Vấn đề | Bằng chứng | Tác động / Trạng thái |
 | --- | --- | --- | --- |
-| A1 | **Tên CSDL khác nhau ở các Subscriber** | `database/Fashion_Q1.sql`, `Fashion_Q7.sql`, `Fashion_TD.sql` | Vi phạm quy tắc "trong suốt" của GV: một stored procedure phải viết khác nhau cho từng site |
-| A2 | **Tên Linked Server khác nhau** | README mục 24 | Cùng lý do. Cần chốt quy ước: tên link đặt theo **đích** (`SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL`) và stored procedure luôn tham chiếu đủ các đích |
-| A3 | **`KhachHang.MaKhachHang` không có định danh toàn hệ thống** | `Fashion_Q1.sql` (khóa `varchar(10)`) | Mô hình copy **hai chiều** (site → Central → site). Hai site cùng tạo `KH001` sẽ đụng khóa chính, replication dừng. Cần khóa toàn cục: GUID hoặc mã có tiền tố site |
-| A4 | **`KhachHang` có ràng buộc `UNIQUE(SoDienThoai)`** | `Fashion_Q1.sql` | Hai site cùng số điện thoại, khác mã khách → lỗi unique khi gộp. Cần quy tắc giải quyết xung đột |
-| A5 | **Thiếu cột version / timestamp** trên bảng đồng bộ hai chiều | schema hiện tại | Không phân biệt được bản ghi mới hay cũ nên không giải quyết được xung đột |
-| A6 | **`HoaDon.MaHoaDon` chưa có quy tắc sinh mã toàn hệ thống** | `Fashion_Q1.sql`; `backend/.../service/GeneratedId.java` sinh mã không có tiền tố site | Central gộp báo cáo từ ba site sẽ ra mã hóa đơn trùng |
-| A7 | **Chưa tách rõ bảng chung và bảng riêng** | ba file schema giống nhau 100%, không có bảng riêng cho Central | Không lập được publication / subscription đúng, không vẽ được sơ đồ định vị |
-| A8 | **`Fashion_TD.sql` tạo tên database `Fashion_TD`** | `database/Fashion_TD.sql` | README quy định `Fashion_ThuDuc` (mục 3 và mục 24) |
-| A9 | **`Fashion_Q7.sql` và `Fashion_TD.sql` thiếu `distributed_user`** | chỉ `Fashion_Q1.sql` có `CREATE USER` + `db_datareader` / `db_datawriter` | Linked server tới hai site này sẽ lỗi phân quyền |
-| A10 | **`TaiKhoan.MaTaiKhoan` là `INT IDENTITY`** | `Fashion_Q1.sql` | Ổn vì bảng local của từng site. Nếu Central phải quản lý tài khoản toàn chuỗi thì mã này không dùng được |
-| A11 | **Backend thiếu entity `TonKho` và `ChiTietHoaDon`** | `backend/src/main/java/.../entity/` | Không làm được nghiệp vụ bán hàng và cập nhật tồn |
-| A12 | **`GeneratedId` quét toàn bảng để sinh mã** | `backend/.../service/GeneratedId.java` | Mỗi site có bộ mã riêng nên mã trùng toàn hệ thống, đồng thời O(n) mỗi lần tạo |
+| A1 | ~~**Tên CSDL khác nhau ở các Subscriber**~~ | `Fashion_Store.sql` | ✅ **Đã chốt**: Cả 3 site dùng chung `Fashion_Store`, Central là `Fashion_Central`. |
+| A2 | ~~**Tên Linked Server khác nhau**~~ | `database/linked-servers.sql` | ✅ **Đã chốt**: Tên link đặt theo đích (`SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL`). |
+| A3 | ~~**`KhachHang.MaKhachHang` không có định danh toàn hệ thống**~~ | `seed.sql` | ✅ **Đã chốt**: Tiền tố site (`Q1-KH...`, `Q7-KH...`, `TD-KH...`) chống đụng khóa chính. |
+| A4 | ~~**`KhachHang` có ràng buộc `UNIQUE(SoDienThoai)`**~~ | `database/common.sql` | ✅ **Đã xử lý (D10)**: Bỏ constraint UNIQUE, đổi sang Non-Clustered Index `IX_KhachHang_SoDienThoai`. |
+| A5 | ~~**Thiếu cột version / timestamp**~~ | `database/common.sql` | ✅ **Đã xử lý (D11)**: Thêm cột `LastModified DATETIME2(3) DEFAULT SYSUTCDATETIME()`, hỗ trợ Last-In-Wins. |
+| A6 | **`HoaDon.MaHoaDon` quy tắc sinh mã toàn hệ thống** | `seed.sql` dùng `Q1-HD...` | 🟡 Seed đã chuẩn hóa tiền tố; backend `SalesService` cần áp dụng logic sinh mã theo site. |
+| A7 | **Tách rõ bảng chung và bảng riêng** | `Fashion_Central.sql` vs `Fashion_Store.sql` | ✅ Đã tách bảng chung (`SanPham`, `ChiNhanh`) và bảng riêng (`TonKho`, `HoaDon`, `NhanVien`). |
+| A8 | ~~**`Fashion_TD.sql` tạo tên database `Fashion_TD`**~~ | `sites/Fashion_Store.sql` | ✅ Đã thay bằng `Fashion_Store` cho cả 3 site. |
+| A9 | ~~**Thiếu `distributed_user` ở site**~~ | `Fashion_Store.sql`, `Fashion_Central.sql` | ✅ Đã tích hợp khối tạo login/user `distributed_user` với quyền `db_datareader` + `db_datawriter`. |
+| A10 | **`TaiKhoan.MaTaiKhoan` là `INT IDENTITY`** | `common.sql` | Ổn vì bảng local của từng site hoặc replicate read-only từ Central. |
+| A11 | ~~**Backend thiếu entity `TonKho` và `ChiTietHoaDon`**~~ | ✅ **Đã xong**: `entity/TonKho.java`, `entity/ChiTietHoaDon.java` + repository + `SalesService` | — |
+| A12 | **`GeneratedId` quét toàn bảng để sinh mã** | `backend/.../service/GeneratedId.java` | Cần cập nhật sinh mã theo tiền tố site. |
 
 ### B. Có thể để sau, nhưng phải biết trước
 
 | # | Vấn đề | Ghi chú |
 | --- | --- | --- |
-| B1 | Không có dữ liệu mẫu (không có câu `INSERT` nào) | README mục 30 nói "đã có database và dữ liệu sơ bộ" nhưng thực tế trong repo không có dữ liệu. Cần bộ dữ liệu đúng kịch bản demo: `SP001` tồn bằng 10 ở Quận 7, `KH001`, ba chi nhánh, nhân viên và tài khoản |
-| B2 | `database/` không có `central.sql` và `common.sql` | `docs/setup.md` mục 3-4 đang hướng dẫn chạy hai file không tồn tại |
-| B3 | File `.sql` lưu trong git dạng **UTF-16 LE BOM**, chưa có `.gitattributes` | Diff và merge rất khó đọc |
-| B4 | Script không idempotent | Hardcode đường dẫn `MSSQL17.MSSQLSERVER`, `CREATE USER ... FOR LOGIN` giả định login đã có sẵn, `CREATE DATABASE` không kiểm tra tồn tại |
-| B5 | Chưa có hướng dẫn SQL Server Agent, edition, mixed auth | `docs/setup.md` thiếu điều kiện tiên quyết để phân tán |
-| B6 | Chưa có shared folder cho snapshot (`\\<CENTRAL>\REPLDATA`, Everyone Read/Write) | Mẫu GV mục II "Chuẩn bị" yêu cầu |
-| B7 | Chưa có bảng log / queue đồng bộ ở Central | README mục 10 yêu cầu "lưu được thay đổi khi mất mạng". Nếu dùng trigger (mẫu GV mục 4) thì bắt buộc có |
-| B8 | Chưa có test cho backend | `backend/src/test` chưa tồn tại. GV yêu cầu bằng chứng "không tồn âm", "không tạo trùng hóa đơn" |
-| B9 | `docs/architecture.md` mô tả sai thực tế file SQL | Doc nói các file SQL "chỉ kiểm tra kết nối" trong khi thực tế là script tạo database |
+| B1 | ~~Không có dữ liệu mẫu~~ | ✅ **Đã xong**: `database/seed.sql` đã có **100 sản phẩm**, **300 dòng tồn kho**, 15 KH, 10 NV, 10 tài khoản, 7 hóa đơn mẫu. |
+| B2 | ~~`database/` không có `central.sql` và `common.sql`~~ | ✅ **Đã xong**: Đã có `Fashion_Central.sql`, `common.sql`, `linked-servers.sql`, `central-procs.sql`, `sites/site-procs.sql`, `replication.sql`. |
+| B3 | ~~File `.sql` thiếu `.gitattributes`~~ | ✅ **Đã xong**: Đã tạo `.gitattributes` ép mã hóa UTF-8. Các script SQL mới đều là UTF-8. |
+| B4 | Script không idempotent | 🟡 `Fashion_Central.sql` & `Fashion_Store.sql` đã có `DROP IF EXISTS`; `linked-servers.sql` có `sp_dropserver`. |
+| B5 | ~~Chưa có hướng dẫn SQL Server Agent, edition, mixed auth~~ | ✅ **Đã xong** trong `docs/setup.md` (runbook 4 máy). |
+| B6 | ~~Chưa có shared folder cho snapshot~~ | ✅ **Đã có hướng dẫn** `\\<CENTRAL>\REPLDATA`, Everyone Read/Write trong `docs/setup.md`. |
+| B7 | Chưa có bảng log / queue đồng bộ ở Central | Có mẫu `SyncQueue` trong `docs/setup.md` mục 8.1. |
+| B8 | ~~Chưa có test cho backend~~ | ✅ **Đã có 73 test / 11 lớp** (`mvnw.cmd test` pass). |
+| B9 | ~~`docs/architecture.md` mô tả sai thực tế file SQL~~ | ✅ **Đã sửa**: mô tả đúng các file `database/`. |
 
 ### C. Phần đang tốt, giữ nguyên
 
@@ -115,10 +141,10 @@ database + backend + frontend: khoảng 60%.**
 ```text
 database/
 ├── common.sql          # schema dùng chung, stored procedure, định nghĩa bảng
-├── central.sql         # Fashion_Central và linked server tới ba site
-├── q1.sql
-├── q7.sql
-├── thuduc.sql
+├── Fashion_Central.sql # Fashion_Central + linked server tới ba site (đã có bảng, thiếu linked server)
+├── Fashion_Q1.sql      # đã có
+├── Fashion_Q7.sql      # đã có
+├── Fashion_TD.sql      # đã có, cần đổi tên Fashion_ThuDuc
 ├── replication/
 │   ├── 01_configure_distributor.sql
 │   ├── 02_create_publication.sql    # có Add Filter theo MaChiNhanh và Add Join dẫn xuất
@@ -139,21 +165,27 @@ database/
 
 ### Giai đoạn 2 - Backend
 
-1. Thêm entity `TonKho` và `ChiTietHoaDon` kèm repository và specification.
-2. Thêm API tồn kho: danh sách, sắp hết hàng, nhập kho, tồn theo chi nhánh.
-3. Thêm API bán hàng gọi stored procedure `usp_BanHang`.
-4. Thêm API thống kê và báo cáo (doanh thu theo khoảng ngày, top sản phẩm, doanh số nhân viên).
-5. Thêm API trạng thái site (ping từng linked server).
-6. Thêm API tổng hợp phân tán ở Central.
-7. Bổ sung `branchId` vào `LoginResponse` và `AccountResponse` (cột `NhanVien.MaChiNhanh` đã có sẵn).
-8. Thêm các API GET còn thiếu: `/employees`, `/accounts`, `/branches`, `/api/invoices`.
-9. Sửa `GeneratedId`: sinh mã có tiền tố site, không quét toàn bảng.
-10. Thêm test cho nghiệp vụ bán hàng.
-11. Tách profile cấu hình theo vai trò máy: Central đọc linked server, site đọc database local.
+> **Cập nhật 2026-10-29:** mục 1, 2, 4, 7, 8, 10 đã xong (mục 3 làm bằng service transaction
+> thay vì `usp_BanHang`; mục 5, 6, 9, 11 còn mở).
+
+1. ✅ Thêm entity `TonKho` và `ChiTietHoaDon` kèm repository và specification.
+2. ✅ Thêm API tồn kho: danh sách, sắp hết hàng, nhập kho, tồn theo chi nhánh.
+3. 🟡 Thêm API bán hàng — hiện dùng `SalesService` (`POST /api/sales/checkout`) thay vì gọi
+   stored procedure `usp_BanHang`; chưa có idempotency.
+4. ✅ Thêm API thống kê và báo cáo (doanh thu theo khoảng ngày, top sản phẩm, doanh số nhân viên).
+5. ❌ Thêm API trạng thái site (ping từng linked server).
+6. ❌ Thêm API tổng hợp phân tán ở Central.
+7. ✅ Bổ sung `branchId` vào `LoginResponse` (cột `NhanVien.MaChiNhanh` đã có sẵn).
+8. ✅ Thêm các API GET còn thiếu: `/employees`, `/accounts`, `/branches`, `/api/invoices`.
+9. ❌ Sửa `GeneratedId`: sinh mã có tiền tố site, không quét toàn bảng.
+10. 🟡 Thêm test — 73 test / 11 lớp đã pass; còn thiếu test inventory, sales, product, customer, auth.
+11. 🟡 Tách profile cấu hình theo vai trò máy — mới có `application-local.properties`.
 
 ### Giai đoạn 3 - Frontend
 
-Xem mục 5.
+✅ **Cơ bản xong** (xem mục 5): đủ 30 trang, 10/11 service gọi API thật, lint + build sạch.
+Còn lại: `siteService` (chờ API trạng thái site), rà trạng thái tải/lỗi/rỗng từng trang,
+và chốt mã chi nhánh ở `config/branches.js`.
 
 ### Giai đoạn 4 - Phân tán
 
@@ -183,71 +215,58 @@ Bám đúng trình tự mẫu GV mục I và II:
 
 ---
 
-## 5. Trạng thái frontend hiện tại
+## 5. Trạng thái frontend hiện tại (cập nhật 2026-10-29)
 
-### 5.1 Các trang đã có giao diện và chạy được với dữ liệu giả
+### 5.1 Toàn bộ giao diện đã có và đang gọi API thật
 
-Phần việc của Nguyễn Quốc Đạt đã build xong toàn bộ giao diện. Backend chưa có API tồn kho
-và thống kê nên các service trong `frontend/src/services/` trả dữ liệu giả theo đúng quy ước
-dự án (`frontend/README.md`, mục "Gọi dữ liệu"): khi backend có API chỉ sửa phần thân hàm
-trong service, trang giao diện không phải sửa.
+30 file `.jsx` trong `frontend/src/pages/`, phủ **27 route menu** (`config/nav.js`) + **7 route chi tiết**
+(`EXTRA_PAGES` trong `App.jsx`). Không còn trang "đang xây dựng".
 
-| Trang | Route trong `nav.js` | Tệp |
-| --- | --- | --- |
-| Tồn kho (chi nhánh của tôi) | `/staff/inventory`, `/manager/inventory` | `frontend/src/pages/inventory/InventoryPage.jsx` |
-| Tồn kho toàn chuỗi | `/admin/inventory` (tab "Toàn chuỗi") | cùng tệp trên |
-| Tồn kho theo chi nhánh | `/admin/inventory` (tab "Theo chi nhánh") | cùng tệp trên |
-| Sắp hết hàng | `/manager/low-stock` | `frontend/src/pages/inventory/LowStockPage.jsx` |
-| Dashboard Admin | `/admin/dashboard` | `frontend/src/pages/dashboard/AdminDashboardPage.jsx` |
-| Thống kê | `/manager/statistics`, `/admin/statistics` | `frontend/src/pages/statistics/StatisticsPage.jsx` |
-| So sánh doanh thu | `/admin/revenue` | `frontend/src/pages/statistics/RevenueComparisonPage.jsx` |
-| Sản phẩm bán chạy | `/admin/top-products` | `frontend/src/pages/statistics/TopProductsPage.jsx` |
-| Doanh số nhân viên | `/admin/employee-sales` | `frontend/src/pages/statistics/EmployeeSalesPage.jsx` |
+**10/11 service gọi API thật** qua `frontend/src/api/client.js`:
 
-Các service dùng chung:
-
-| Tệp | Trách nhiệm |
+| Service | Endpoint chính |
 | --- | --- |
-| `frontend/src/services/mockData.js` | Dữ liệu giả: 12 sản phẩm, 9 nhân viên, 8 khách hàng, 36 dòng tồn kho, lịch sử 90 ngày hóa đơn kèm chi tiết hóa đơn. Dùng bộ sinh số ổn định nên reload không nhảy số |
-| `frontend/src/services/inventoryService.js` | `listInventory`, `listLowStock`, `getInventorySummary`, `adjustStock` |
-| `frontend/src/services/statisticsService.js` | `getRevenueSummary`, `getRevenueSeries`, `getRevenueByBranch`, `getRevenueMatrix`, `getTopProducts`, `getEmployeeSales` |
-| `frontend/src/services/dashboardService.js` | `getAdminDashboard` |
+| `authService` | `POST /api/auth/login`, `/refresh_token`, `/change-password` |
+| `accountService` | `/api/accounts` (+ role/status/reset-password) |
+| `branchService` | `/api/branches`, ghép số liệu từ employee/inventory/statistics |
+| `customerService` | `/api/customers` (+ lịch sử hóa đơn, bật/tắt hoạt động) |
+| `dashboardService` | `/api/dashboard/admin`, `/manager`, `/staff` |
+| `employeeService` | `/api/employees` |
+| `inventoryService` | `/api/inventory` (+ nhập/điều chỉnh, sắp hết) |
+| `invoiceService` | `/api/invoices` + `POST /api/sales/checkout` |
+| `productService` | `/api/products` |
+| `statisticsService` | `/api/statistics/*` (doanh thu, chuỗi ngày, chi nhánh, top SP, nhân viên) |
+| ~~`siteService`~~ | ❌ **vẫn mock** — chờ API trạng thái site (P3-03) |
 
-### 5.2 Các trang còn thiếu giao diện (việc của thành viên khác)
+Hạ tầng dùng chung:
+- `src/api/client.js`: gắn `Bearer`, tự refresh khi 401 một lần, phát `SESSION_EXPIRED_EVENT`,
+  `getAllPages()` gom phân trang (BE 0-based → FE 1-based), `buildQuery()`.
+- `src/context/AuthContext.jsx` nghe sự kiện hết phiên để đăng xuất.
+- Mỗi service có hàm `to*` đổi shape backend → shape trang đang dùng, nên **không phải sửa trang**
+  khi API đổi tên trường.
 
-| Trang | Route | Phụ trách |
+### 5.2 Trang còn phụ thuộc dữ liệu giả / chưa hoàn chỉnh
+
+| Trang | Route | Tình trạng |
 | --- | --- | --- |
-| Bán hàng (POS) | `/pos` | Nguyễn Bảo |
-| Sản phẩm | `/staff/products`, `/manager/products`, `/admin/products` | Nguyễn Bảo |
-| Khách hàng | `/staff/customers`, `/manager/customers`, `/admin/customers` | Nguyễn Bảo |
-| Hóa đơn | `/staff/invoices`, `/manager/invoices`, `/admin/invoices` | Nguyễn Bảo |
-| Dashboard Manager | `/manager/dashboard` | Nguyễn Bảo |
-| Hồ sơ, 403, 404 | `/profile` | Trần Vĩnh Khang |
-| Nhân viên | `/manager/employees`, `/admin/employees` | Trần Vĩnh Khang |
-| Tài khoản | `/manager/accounts`, `/admin/accounts` | Trần Vĩnh Khang |
-| Chi nhánh | `/admin/branches` | Trần Vĩnh Khang |
-| Trạng thái Site | `/admin/sites` | Trần Vĩnh Khang |
+| Trạng thái Site | `/admin/sites` | Dùng `siteService` mock; cần API ping linked server |
+| Tồn kho toàn chuỗi (Admin) | `/admin/inventory` tab "Toàn chuỗi" | Ghép từ `/api/inventory` theo chi nhánh; chưa có endpoint tổng hợp thật |
+| Chi tiết khách hàng | `/staff/customers/:id`, ... | Đã gọi API; cần kiểm tra lại trạng thái lỗi/rỗng sau khi có seed |
 
 ### 5.3 Ghi chú kỹ thuật cho frontend
 
 - **Contract API**: mọi API trả bọc `{ code, message, result }`. Danh sách trả
   `result = { content, pageNumber, pageSize, totalElements, totalPages, last }`.
-  Component `Pagination` đánh số trang từ 1, backend `page` bắt đầu từ 0, phải trừ 1 khi gọi.
-- **CORS**: Vite chạy cổng 5173, backend mặc định `CORS_ALLOWED_ORIGINS=http://localhost:3000`.
-  Khi chạy backend cần đặt biến môi trường `CORS_ALLOWED_ORIGINS=http://localhost:5173`.
-- **Vai trò**: backend trả `STAFF` / `MANAGER` / `ADMIN` (chữ hoa), frontend dùng
-  `staff` / `manager` / `admin` (chữ thường). `RoleGuard` so sánh trực tiếp nên phải hạ chữ
-  thường khi lưu người dùng.
-- **`branchId` chưa có trong response đăng nhập**: `LoginResponse` không trả `branchId` trong
-  khi quy ước dữ liệu yêu cầu staff và manager chỉ thấy dữ liệu chi nhánh của mình.
-  Cần bổ sung ở backend, không cần sửa schema vì cột `NhanVien.MaChiNhanh` đã có sẵn.
-- **Lint**: bản ESLint dùng `eslint-plugin-react-hooks` bản mới có luật
-  `react-hooks/set-state-in-effect` chặn `setState` đồng bộ trong effect. Các trang dùng
-  pattern suy luận trạng thái tải từ khoá request, chỉ gọi `setState` trong callback của promise.
-- **Thanh cuộn của menu bên**: thanh cuộn mặc định của Windows vẽ nền xám sáng trên nền tối
-  của sidebar nên rất lóe. Đã thêm class `.sidebar-scroll` trong `frontend/src/index.css`
-  (ẩn track, thumb mảnh 6px hòa màu `--color-card`) và gắn vào `<nav>` của `Sidebar.jsx`.
-  Class này dùng lại được cho mọi vùng nền tối sau này.
-- **Dữ liệu giả có tính ổn định**: `mockData.js` dùng bộ sinh số giả tất định nên reload trang
-  không làm đổi số liệu. Tồn kho giả được giữ trong bộ nhớ nên thao tác "nhập kho" có hiệu lực
-  trong suốt phiên làm việc. Khi chuyển sang API thật, chỉ thay phần thân hàm trong service.
+  `client.js` đã trừ 1 khi gọi và `Pagination` đánh số từ 1.
+- **CORS**: `app.cors.allowed-origins=http://localhost:5173` trong `application-local.properties` —
+  đã khớp Vite, không cần đặt biến môi trường như ghi chú cũ.
+- **Vai trò**: backend trả `STAFF` / `MANAGER` / `ADMIN`; `authService` hạ chữ thường.
+- **`branchId`**: ✅ `LoginResponse` đã trả `branchId`; `authService` lưu vào user (Admin = `null`).
+- **Mã chi nhánh**: ⚠️ `config/branches.js` đang hardcode `CN001/CN002/CN003` và "Store Quận 3".
+  Đề bài + `AGENTS.md` dùng `CN01/CN02/CN03` (Quận 1 / Quận 7 / Thủ Đức) → phải chốt (Q10 trong
+  `PROJECT_STATUS.md`) trước khi seed.
+- **Lint**: `eslint-plugin-react-hooks` bản mới có luật `react-hooks/set-state-in-effect`;
+  `useAsyncData` suy luận `loading` từ khoá request, chỉ `setState` trong callback promise.
+- **Thanh cuộn sidebar**: class `.sidebar-scroll` trong `index.css`, gắn vào `<nav>` của `Sidebar.jsx`.
+- **Mock còn lại**: `mockData.js` + `mockStore.js` chỉ còn `siteService` dùng; giữ lại để demo offline.
+  Khi xong P4-10 thì xoá dần (P4-11).

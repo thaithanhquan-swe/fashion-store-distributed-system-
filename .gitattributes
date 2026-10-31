@@ -1,0 +1,4 @@
+# Force git to treat all SQL scripts and docs as UTF-8 with LF or CRLF
+*.sql text working-tree-encoding=UTF-8 eol=crlf
+*.md text eol=crlf
+*.properties text eol=crlf

@@ -5,12 +5,19 @@
 ## Bộ khung trong repository
 
 Đã tạo cấu trúc `database/`, `backend/`, `frontend/` và `docs/` theo mục 12.
-Các file SQL hiện cung cấp kiểm tra chỉ đọc và truy vấn mẫu; chưa tạo schema,
-stored procedure bán hàng hoặc cấu hình replication. Backend đã có bộ khung
-Spring Boot REST API; frontend hiện mới có tài liệu phân chia trách nhiệm.
 
+- **Database:** 4 script tạo DB + 8 bảng (`Fashion_Central`, `Fashion_Q1`, `Fashion_Q7`, `Fashion_TD`).
+  Chưa có dữ liệu mẫu, chưa có replication / linked server / trigger.
+- **Backend:** Spring Boot REST API — 12 controller, 50 endpoint, 73 test pass.
+- **Frontend:** React + Vite — 30 trang, 10/11 service gọi API thật (chỉ `siteService` còn mock).
+- **Phân tán:** chưa triển khai (0%).
+
+Tài liệu:
+
+- [Trạng thái & kế hoạch](docs/PROJECT_STATUS.md) — **nguồn sự thật duy nhất**
 - [Thiết kế kiến trúc](docs/architecture.md)
-- [Hướng dẫn sử dụng và kiểm tra](docs/setup.md)
+- [Hướng dẫn triển khai 4 máy](docs/setup.md)
+- [Đối chiếu mẫu giảng viên](docs/gap-analysis.md)
 - [Thiết kế backend](backend/README.md)
 - [Thiết kế frontend](frontend/README.md)
 
@@ -526,11 +533,10 @@ fashion-store-distributed-system/
 ├── README.md
 │
 ├── database/
-│   ├── central.sql
-│   ├── q1.sql
-│   ├── q7.sql
-│   ├── thuduc.sql
-│   └── common.sql
+│   ├── Fashion_Central.sql
+│   ├── Fashion_Q1.sql
+│   ├── Fashion_Q7.sql
+│   └── Fashion_TD.sql
 │
 ├── backend/
 ├── frontend/
@@ -541,90 +547,61 @@ fashion-store-distributed-system/
 
 # 13. Ý nghĩa các file SQL
 
-## `database/central.sql`
+> Cập nhật 2026-10-29: tên file thực tế là `Fashion_*.sql`. Cả 4 file đều **chỉ tạo DB + 8 bảng**,
+> chưa có dữ liệu mẫu (`INSERT`), chưa có linked server, chưa có replication.
 
-Chạy trên **Máy 1 – Central**.
+## `database/Fashion_Central.sql`
 
-Chứa:
+Chạy trên **Máy 1 – Central**. Tạo:
 
 ```text
-- Cấu hình Fashion_Central
-- Linked Server tới Q1
-- Linked Server tới Q7
-- Linked Server tới Thủ Đức
-- Các truy vấn tổng hợp
+- Database Fashion_Central
+- 8 bảng: ChiNhanh, ChiTietHoaDon, HoaDon, KhachHang,
+          NhanVien, SanPham, TaiKhoan, TonKho
+- CREATE USER distributed_user (db_datareader, db_datawriter)
+- sp_DongBoSanPham (ví dụ, còn lỗi tên linked server + chỉ đồng bộ TenSanPham)
+```
+
+**Chưa có:** linked server tới 3 site, truy vấn tổng hợp, publication.
+
+---
+
+## `database/Fashion_Q1.sql`
+
+Chạy trên **Máy 2 – Store A Quận 1**. Tạo:
+
+```text
+- Database Fashion_Q1
+- 8 bảng giống Central
+- CREATE USER distributed_user
 ```
 
 ---
 
-## `database/q1.sql`
+## `database/Fashion_Q7.sql`
 
-Chạy trên:
-
-```text
-Máy 2 – Store A Quận 1
-```
-
-Chứa:
-
-```text
-- Cấu hình Fashion_Q1
-- Dữ liệu CN01
-- Cấu hình kết nối tới CENTRAL
-- Các thiết lập riêng của Q1
-```
+Chạy trên **Máy 3 – Store B Quận 7**. Tạo `Fashion_Q7` + 8 bảng.
+**Thiếu `distributed_user`** → phải chạy thêm mục 2.7 của `docs/setup.md`.
 
 ---
 
-## `database/q7.sql`
+## `database/Fashion_TD.sql`
 
-Chạy trên:
-
-```text
-Máy 3 – Store B Quận 7
-```
-
-Chứa:
-
-```text
-- Cấu hình Fashion_Q7
-- Dữ liệu CN02
-- Cấu hình kết nối tới CENTRAL
-- Các thiết lập riêng của Q7
-```
+Chạy trên **Máy 4 – Store C Thủ Đức**. Tạo `Fashion_TD` + 8 bảng.
+**Tên DB sai** so với quy ước `Fashion_ThuDuc`; **thiếu `distributed_user`**.
 
 ---
 
-## `database/thuduc.sql`
-
-Chạy trên:
+## Chưa có
 
 ```text
-Máy 4 – Store C Thủ Đức
+database/common.sql        Schema/SP dùng chung
+database/seed.sql          Dữ liệu mẫu theo kịch bản demo
+database/linked-server.sql Script sp_addlinkedserver cho Central
+database/replication/      Publication + subscription + trigger
 ```
 
-Chứa:
-
-```text
-- Cấu hình Fashion_ThuDuc
-- Dữ liệu CN03
-- Cấu hình kết nối tới CENTRAL
-- Các thiết lập riêng của Thủ Đức
-```
-
----
-
-## `database/common.sql`
-
-Chứa các phần dùng chung:
-
-```text
-- Stored Procedure bán hàng
-- Transaction
-- Cập nhật tồn kho
-- Đồng bộ khách hàng
-- Truy vấn báo cáo
-```
+Xem `docs/PROJECT_STATUS.md` mục 7 (P1-01 → P1-08) để biết thứ tự làm.
 
 ---
 
@@ -1042,13 +1019,13 @@ Kiểm tra database và dữ liệu.
 Chạy file SQL tương ứng:
 
 ```text
-Máy 1 → database/central.sql
+Máy 1 → database/Fashion_Central.sql
 
-Máy 2 → database/q1.sql
+Máy 2 → database/Fashion_Q1.sql
 
-Máy 3 → database/q7.sql
+Máy 3 → database/Fashion_Q7.sql
 
-Máy 4 → database/thuduc.sql
+Máy 4 → database/Fashion_TD.sql   (sẽ đổi thành Fashion_ThuDuc)
 ```
 
 ## Bước 9
@@ -1059,7 +1036,7 @@ Chạy:
 database/common.sql
 ```
 
-nếu cần các Stored Procedure dùng chung.
+nếu cần các Stored Procedure dùng chung. **File này chưa tồn tại** — xem `docs/PROJECT_STATUS.md` P1-01.
 
 ## Bước 10
 
@@ -1081,18 +1058,23 @@ Test khi ngắt kết nối Central.
 
 # 30. Trạng thái database hiện tại
 
-Project đã có database và dữ liệu sơ bộ:
+Trong repo đã có **script tạo schema** cho 4 database (mỗi file 8 bảng):
 
 ```text
-Fashion_Central
-Fashion_Q1
-Fashion_Q7
-Fashion_ThuDuc
+Fashion_Central.sql   -> Fashion_Central   (+ distributed_user, sp_DongBoSanPham)
+Fashion_Q1.sql        -> Fashion_Q1        (+ distributed_user)
+Fashion_Q7.sql        -> Fashion_Q7        (thiếu distributed_user)
+Fashion_TD.sql        -> Fashion_TD        (thiếu distributed_user, tên sai quy ước)
 ```
+
+**Chưa có dữ liệu mẫu:** cả 4 file đều **0 câu `INSERT`**. Database sau khi tạo sẽ trống;
+backend tự tạo tài khoản demo và chi nhánh `Local Demo Branch` (`CN001`).
+
+**Chưa có:** linked server, publication/subscription, trigger, `SyncQueue`, `seed.sql`.
 
 Do đó các thành viên **không tự ý tạo database mới hoặc thay đổi cấu trúc bảng**.
 
-Nếu cần thay đổi phải thống nhất với nhóm trước.
+Nếu cần thay đổi phải thống nhất với nhóm trước. Trạng thái chi tiết: `docs/PROJECT_STATUS.md`.
 
 ---
 
@@ -1109,6 +1091,12 @@ Foreign Key
 Mã chi nhánh
 Tên Linked Server
 ```
+
+> **Quy tắc trong suốt (transparency):** tên CSDL ở các Subscriber phải **giống nhau** và tên
+> Linked Server phải **thống nhất theo quy ước** (`SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL`).
+> Nhờ đó một stored procedure viết một lần chạy được ở mọi site mà không phải sửa đường dẫn.
+> Hiện 3 site còn dùng 3 tên khác nhau (`Fashion_Q1`, `Fashion_Q7`, `Fashion_TD`) — xem
+> `docs/setup.md` mục 0.2 để chốt trước khi triển khai.
 
 Nếu cần sửa:
 
