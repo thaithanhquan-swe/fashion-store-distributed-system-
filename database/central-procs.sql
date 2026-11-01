@@ -172,12 +172,20 @@ END;
 GO
 
 -- sp_DongBoNhanVien_TaiKhoan: Push filtered employees/accounts to each site
+-- Note: Under Model B1 (Merge Replication), background sync is automatic.
+-- This procedure serves as a manual / fallback sync mechanism.
 CREATE OR ALTER PROCEDURE [dbo].[sp_DongBoNhanVien_TaiKhoan]
     @MaChiNhanhSite varchar(10),  -- CN1, CN2, or CN3
     @LinkedServerName sysname     -- SITE_Q1, SITE_Q7, or SITE_THUDUC
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    -- Validate linked server name to prevent SQL injection
+    IF @LinkedServerName NOT IN (N'SITE_Q1', N'SITE_Q7', N'SITE_THUDUC')
+    BEGIN
+        THROW 50001, N'Tên linked server không hợp lệ. Chỉ chấp nhận SITE_Q1, SITE_Q7, SITE_THUDUC.', 1;
+    END
 
     DECLARE @sql nvarchar(max);
 
@@ -275,8 +283,6 @@ BEGIN
 
     PRINT N'sp_DongBoHoaDon: Aggregated invoices from all 3 sites.';
 END;
-GO
-
 GO
 
 PRINT N'Central distributed procedures created.';

@@ -18,6 +18,9 @@ GO
 -- QUẬN 7 (CN2)   : :setvar SiteBranch "CN2"
 -- THỦ ĐỨC (CN3)  : :setvar SiteBranch "CN3"
 
+-- Note: Under Model B1 (Merge Replication), synchronization is automatic via Merge Agent.
+-- The procedures below serve as manual / fallback synchronization via Linked Server CENTRAL.
+
 -- sp_DongBoKhachHang: Pull latest from Central (two-way sync per PDF §3.6)
 -- Uses linked server to Central: CENTRAL.Fashion_Central.dbo.KhachHang
 CREATE OR ALTER PROCEDURE [dbo].[sp_DongBoKhachHang]
@@ -123,8 +126,6 @@ BEGIN
         WHERE c.MaHoaDon = ct.MaHoaDon AND c.MaSanPham = ct.MaSanPham
     );
 END;
-GO
-
 GO
 
 PRINT N'Site distributed procedures created for branch $(SiteBranch).';

@@ -75,7 +75,7 @@ GO
 -- TaiKhoan: Login accounts. Central = all. Site = replicated (read-only) for local login.
 -- Filtered via NhanVien.MaChiNhanh at replication time.
 CREATE TABLE [dbo].[TaiKhoan] (
-    [MaTaiKhoan] [int] IDENTITY(1,1) NOT NULL,
+    [MaTaiKhoan] [int] IDENTITY(1,1) NOT FOR REPLICATION NOT NULL,
     [MaNhanVien] [varchar](10) NOT NULL,
     [TenDangNhap] [varchar](50) NOT NULL,
     [MatKhau] [varchar](255) NOT NULL,

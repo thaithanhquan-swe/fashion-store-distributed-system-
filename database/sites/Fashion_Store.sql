@@ -55,7 +55,7 @@ GO
 CREATE DATABASE [Fashion_Store];
 GO
 
--- FULL recovery is required for transactional replication.
+-- FULL recovery supports Merge replication (snapshot + change tracking).
 ALTER DATABASE [Fashion_Store] SET RECOVERY FULL;
 GO
 
@@ -104,6 +104,7 @@ AFTER INSERT, UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user' RETURN; -- Bypass for replication / sync agent
     IF EXISTS (
         SELECT 1 FROM inserted i
         WHERE i.MaChiNhanh <> N'$(SiteBranch)'
@@ -125,6 +126,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[SanPham] t
+        JOIN deleted d ON t.MaSanPham = d.MaSanPham;
+        RETURN;
+    END;
     RAISERROR (N'Bảng SanPham là chỉ đọc trên site. Dữ liệu đồng bộ từ Central.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
@@ -136,6 +144,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[KhachHang] t
+        JOIN deleted d ON t.MaKhachHang = d.MaKhachHang;
+        RETURN;
+    END;
     RAISERROR (N'Bảng KhachHang được đồng bộ 2 chiều. Không xóa trực tiếp trên site.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
@@ -147,6 +162,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[NhanVien] t
+        JOIN deleted d ON t.MaNhanVien = d.MaNhanVien;
+        RETURN;
+    END;
     RAISERROR (N'Bảng NhanVien là chỉ đọc trên site. Dữ liệu đồng bộ từ Central.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
@@ -158,6 +180,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[TaiKhoan] t
+        JOIN deleted d ON t.MaTaiKhoan = d.MaTaiKhoan;
+        RETURN;
+    END;
     RAISERROR (N'Bảng TaiKhoan là chỉ đọc trên site. Dữ liệu đồng bộ từ Central.', 16, 1);
     ROLLBACK TRANSACTION;
 END;

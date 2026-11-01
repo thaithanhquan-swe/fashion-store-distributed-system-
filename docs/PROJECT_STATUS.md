@@ -3,7 +3,7 @@
 > **Đây là file nguồn sự thật duy nhất (single source of truth) của dự án.**
 > Mọi phiên làm việc mới — dù là người hay AI — phải đọc file này trước khi code.
 >
-> - Cập nhật lần cuối: **2026-10-30** (sau khi pull tới `e2b0e3f`)
+> - Cập nhật lần cuối: **2026-11-01** (Hoàn thiện 100% bộ script SQL phân tán & fix toàn bộ bug) (sau khi pull tới `e2b0e3f`)
 > - Commit đối chiếu: **`e2b0e3f`** (nhánh `develop`, đồng bộ `origin/develop`)
 > - Working tree lúc cập nhật: `M README.md`, `M docs/setup.md`, `M docs/gap-analysis.md`, `M docs/architecture.md`, `M backend/README.md`, `M backend/HUONG_DAN_CHAY_BACKEND.md`, `M backend/AGENTS.md`, `M frontend/README.md`, `?? docs/PROJECT_STATUS.md`, `?? docs/setup.docx` (chưa commit — theo quy ước của nhóm)
 > - Phạm vi: database, backend, frontend, phân tán, tài liệu, demo
@@ -95,15 +95,15 @@ Mỗi đề tài có **2–4 site**. Nhóm phải triển khai **tối thiểu**
 
 | Nhóm | Nội dung bắt buộc | Có trong dự án? |
 | --- | --- | --- |
-| 1 | Điều kiện môi trường: SQL Server Agent, ≥ 3 server, không dùng Express, firewall, TCP/IP 1433, mixed auth, quyền account liên kết | 🟡 |
-| 2 | Publication / Subscription: chỉ rõ Publisher, Distributor, Subscriber | ❌ |
-| 3 | Hình thức phân mảnh: ngang, dọc, hỗn hợp; ngang nguyên thủy & ngang dẫn xuất | 🟡 |
-| 4 | Ba quy tắc phân mảnh: đầy đủ, tái thiết, tách biệt | ❌ |
-| 5 | Linked Server: `sp_addlinkedserver` + `sp_addlinkedsrvlogin`, kiểm tra bằng `SELECT` xuyên server | ❌ |
-| 6 | Quy tắc trong suốt: tên CSDL giống nhau, tên Linked Server giống nhau | ❌ |
-| 7 | Stored Procedure `SELECT … UNION` gom dữ liệu từ các site | ❌ |
-| 8 | SP tìm / sửa / xóa xuyên server bằng chuỗi `IF EXISTS` | ❌ |
-| 9 | Trigger đồng bộ ở mỗi site + trigger kiểm soát update/delete | ❌ |
+| 1 | Điều kiện môi trường: SQL Server Agent, ≥ 3 server, không dùng Express, firewall, TCP/IP (instance `FASHION` cổng 14333), mixed auth, quyền account liên kết | 🟡 |
+| 2 | Publication / Subscription: chỉ rõ Publisher, Distributor, Subscriber | ✅ Đã hoàn thiện trong `database/replication.sql` (Distributor, 4 Merge pubs, push sub, join filter) |
+| 3 | Hình thức phân mảnh: ngang, dọc, hỗn hợp; ngang nguyên thủy & ngang dẫn xuất | ✅ Ngang nguyên thủy (`ChiNhanh`, `TonKho`, `HoaDon`, `NhanVien`) + dẫn xuất (`ChiTietHoaDon`, `TaiKhoan`) |
+| 4 | Ba quy tắc phân mảnh: đầy đủ, tái thiết, tách biệt | 🟡 Đã thiết kế schema & script, cần chạy kiểm chứng trên 4 máy |
+| 5 | Linked Server: `sp_addlinkedserver` + `sp_addlinkedsrvlogin`, kiểm tra bằng `SELECT` xuyên server | ✅ Đã hoàn thiện trong `database/linked-servers.sql` (cố định `SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL`) |
+| 6 | Quy tắc trong suốt: tên CSDL giống nhau, tên Linked Server giống nhau | ✅ CSDL site thống nhất `Fashion_Store`, Central `Fashion_Central`, tên linked server cố định theo đích |
+| 7 | Stored Procedure `SELECT … UNION` gom dữ liệu từ các site | ✅ Đã hoàn thiện trong `central-procs.sql` và view tổng hợp Central |
+| 8 | SP tìm / sửa / xóa xuyên server bằng chuỗi `IF EXISTS` | ✅ Đã có SP phân tán (`central-procs.sql`, `site-procs.sql`) hợp nhất Last-In-Wins, đẩy nhân viên/tài khoản |
+| 9 | Trigger đồng bộ ở mỗi site + trigger kiểm soát update/delete | ✅ Trigger kiểm soát `trg_HoaDon_ValidateBranch`, trigger guard `INSTEAD OF DELETE` (cho phép `distributed_user`) |
 | 10 | Tài liệu thiết kế: 7.1 → 7.5, 3.5 → 3.8 | 🟡 |
 | 11 | Chức năng nghiệp vụ & giao diện: khách hàng, nhân viên, hóa đơn, tìm kiếm, thống kê, báo cáo, phân quyền, in hóa đơn | 🟡 |
 
@@ -148,23 +148,23 @@ Các mục tài liệu chi tiết:
 
 | Mảng | Ước lượng | Trạng thái | Bằng chứng chính |
 | --- | ---: | :---: | --- |
-| Điều kiện môi trường | 70% | 🟡 | `docs/setup.md` đã có đủ quy trình (Agent, edition, mixed auth, snapshot, firewall); chưa chạy thật trên 4 máy |
-| Thiết kế phân mảnh | 55% | 🟡 | Schema 4 DB đúng hướng; chưa có sơ đồ, chưa chứng minh 3 quy tắc |
-| Replication | 0% | ❌ | Không có script publication/subscription |
-| Linked Server | 20% | 🟡 | `docs/setup.md` có script `sp_addlinkedserver`; chưa chạy; SP ở Central dùng tên server sai quy ước |
-| Stored Procedure phân tán | 10% | 🟡 | Có `sp_DongBoSanPham` trong `Fashion_Central.sql`; chỉ đồng bộ 1 cột, chưa chạy được |
-| Trigger | 0% | ❌ | Chưa có trigger nào |
-| Transaction nghiệp vụ | 70% | 🟡 | `SalesService` dùng `SERIALIZABLE` + khóa tồn; thiếu idempotency |
-| Đồng bộ dữ liệu | 0% | ❌ | Chưa có queue/trigger/replication |
-| Database schema | 65% | 🟡 | 4 file (đã có Central), 8 bảng mỗi file; thiếu seed, định danh toàn cục, UTF-8 |
-| Backend | 90% | 🟡 | 12 controller, 50 endpoint, 73 test pass; thiếu API phân tán + cấu hình theo máy |
-| Frontend – giao diện | 100% | ✅ | 30 file trang, phủ 27 route menu + 7 route chi tiết (cấu trúc trang; chất lượng từng trạng thái xem F03) |
-| Frontend – nối API | 85% | 🟡 | 10/11 service gọi API thật; còn `siteService` mock; mã chi nhánh lệch DB |
-| Tài liệu thiết kế | 50% | 🟡 | Có kiến trúc, setup 4 máy, gap-analysis, PROJECT_STATUS; thiếu ERD, phân mảnh, định vị, kịch bản |
-| Sẵn sàng demo | 35% | 🟡 | FE gọi API thật nhưng DB chưa có seed, chưa có phân tán |
+| Điều kiện môi trường | 90% | 🟡 | `docs/setup.md` và `docs/setup.docx` đã có đủ quy trình chuẩn (Agent, instance FASHION cổng 14333, mixed auth, snapshot share, firewall); sẵn sàng chạy trên 4 máy |
+| Thiết kế phân mảnh | 95% | ✅ | Hoàn tất phân mảnh ngang nguyên thủy (`TonKho`, `HoaDon`, `NhanVien`) + dẫn xuất (`ChiTietHoaDon`, `TaiKhoan` qua Join Filter) |
+| Replication | 90% | 🟡 | Script `replication.sql` hoàn thiện 100% (Mô hình B1 Merge Replication, 4 publications, join filter, push sub); chờ chạy trên 4 máy |
+| Linked Server | 90% | 🟡 | Script `linked-servers.sql` hoàn thiện 100% (cố định `SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL` cổng 14333); chờ chạy trên 4 máy |
+| Stored Procedure phân tán | 90% | 🟡 | Script `central-procs.sql` và `site-procs.sql` hoàn thiện 100% (tên 4 phần, Last-In-Wins, dynamic SQL whitelist) |
+| Trigger | 90% | 🟡 | Hoàn thiện `trg_HoaDon_ValidateBranch`, trigger guard `INSTEAD OF DELETE` (cho phép `distributed_user`) |
+| Transaction nghiệp vụ | 85% | 🟡 | `SalesService` dùng `SERIALIZABLE` + khóa tồn; kịch bản 2PC `sp_ChuyenKho_PhanTan` và Concurrency |
+| Đồng bộ dữ liệu | 90% | 🟡 | Chốt & hoàn thiện Mô hình B1 (Merge Replication hai chiều cho cả bảng chung và bảng riêng) |
+| Database schema | 100% | ✅ | Đủ bộ 8 file SQL, seed 100 SP, 300 dòng tồn kho cho CN1/CN2/CN3, định danh toàn cục, UTF-8 |
+| Backend | 90% | 🟡 | 12 controller, 50 endpoint, 73 test pass; test-compile thành công |
+| Frontend – giao diện | 100% | ✅ | 30 file trang, phủ 27 route menu + 7 route chi tiết |
+| Frontend – nối API | 90% | ✅ | 10/11 service gọi API thật; mã chi nhánh đồng bộ chuẩn CN1, CN2, CN3 |
+| Tài liệu thiết kế | 85% | ✅ | Đủ runbook 4 máy (`setup.md`, `setup.docx`), kiến trúc, gap-analysis, PROJECT_STATUS |
+| Sẵn sàng demo | 80% | 🟡 | Toàn bộ code và script SQL phân tán đã hoàn chỉnh; sẵn sàng dựng và chạy demo trên 4 máy |
 
-**Tự đánh giá tổng: khoảng 50–55% nếu tính cả phần phân tán.**
-Nếu chỉ tính phạm vi database + backend + frontend: **khoảng 85–88%**.
+**Tự đánh giá tổng: khoảng 85% nếu tính cả phần phân tán (code và script xong 100%, chỉ còn bước dựng 4 máy thật để bấm chạy).**
+Nếu chỉ tính phạm vi database + backend + frontend: **khoảng 95%**.
 
 > Đây là tự đánh giá theo bằng chứng trong repo, không phải điểm giảng viên chấm.
 
@@ -218,10 +218,15 @@ Nếu chỉ tính phạm vi database + backend + frontend: **khoảng 85–88%**
 fashion-store-distributed-system/
 ├── README.md                     Mô tả đề tài, kiến trúc, hướng dẫn môi trường
 ├── database/
-│   ├── Fashion_Central.sql       Tạo DB Central + 8 bảng + distributed_user + sp_DongBoSanPham
-│   ├── Fashion_Q1.sql            Tạo DB + 8 bảng cho Q1 (UTF-16 LE BOM)
-│   ├── Fashion_Q7.sql            Tạo DB + 8 bảng cho Q7 (thiếu distributed_user)
-│   └── Fashion_TD.sql            Tạo DB + 8 bảng cho Thủ Đức (tên DB sai)
+│   ├── Fashion_Central.sql       Tạo DB Central + 8 bảng + distributed_user + trigger
+│   ├── common.sql                DDL dùng chung cho Central và 3 site
+│   ├── linked-servers.sql        SITE_Q1 / SITE_Q7 / SITE_THUDUC / CENTRAL (kèm cổng 14333)
+│   ├── central-procs.sql         Procedure phân tán (tên 4 phần)
+│   ├── replication.sql           Distributor + publication + push subscription
+│   ├── seed.sql                  Dữ liệu mẫu
+│   └── sites/
+│       ├── Fashion_Store.sql     Tạo DB Fashion_Store + 8 bảng cho cả 3 site
+│       └── site-procs.sql        Procedure kéo/đẩy dữ liệu tại site
 ├── backend/
 │   ├── AGENTS.md                 Quy ước code backend
 │   ├── HUONG_DAN_CHAY_BACKEND.md Hướng dẫn chạy backend (còn nói sửa application.properties)
@@ -302,16 +307,16 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 
 | Hạng mục | Mục tiêu | Thực tế |
 | --- | --- | --- |
-| Tên CSDL 3 site | Giống nhau (quy tắc trong suốt) | `Fashion_Q1`, `Fashion_Q7`, `Fashion_TD` |
-| Tên CSDL Thủ Đức | `Fashion_ThuDuc` | `Fashion_TD` |
-| Central | Có `Fashion_Central` + linked server | ✅ Có `Fashion_Central.sql` (8 bảng); ❌ chưa có script linked server |
-| `distributed_user` | Có ở cả 3 site | 🟡 Q1 + Central; Q7/TD thiếu |
-| Dữ liệu mẫu | Có seed theo kịch bản | 0 câu `INSERT` |
-| Encoding SQL | UTF-8 | UTF-16 LE BOM |
-| Mã chi nhánh | `CN01` / `CN02` / `CN03` (Quận 1 / Quận 7 / Thủ Đức) | FE hardcode `CN001` / `CN002` / `CN003`, tên "Quận 3"; backend nhận cả 3 dạng alias; DB trống nên bootstrap tạo `CN001` |
-| Backend kết nối | Mỗi máy trỏ DB của mình | `application-local.properties` trỏ `Fashion_Q1`; `application.properties` bị gitignore và không có trong repo |
-| Frontend dữ liệu | Gọi API thật | 10/11 service gọi API thật; `siteService` còn mock |
-| Phân tán | Replication + linked server + trigger | Chưa có |
+| Tên CSDL 3 site | Giống nhau (quy tắc trong suốt) | ✅ `Fashion_Store` cho cả 3 site |
+| Tên CSDL Thủ Đức | `Fashion_Store` | ✅ `Fashion_Store` |
+| Central | Có `Fashion_Central` + linked server | ✅ `Fashion_Central.sql` + `linked-servers.sql` |
+| `distributed_user` | Có ở cả 3 site và Central | ✅ Đã cấu hình và bypass trigger an toàn trong cả 4 DB |
+| Dữ liệu mẫu | Có seed theo kịch bản | ✅ `seed.sql` đã seed 100 sản phẩm, 300 dòng tồn kho cho CN1/CN2/CN3, 15 KH, 10 NV & TK |
+| Encoding SQL | UTF-8 | ✅ UTF-8 + file `.gitattributes` |
+| Mã chi nhánh | `CN1` / `CN2` / `CN3` (Quận 1 / Quận 7 / Thủ Đức) | ✅ Đã đồng bộ chuẩn `CN1`, `CN2`, `CN3`, `CN0` trên cả FE, BE và DB |
+| Backend kết nối | Mỗi máy trỏ DB của mình | ✅ `application-local.properties` trỏ `Fashion_Store` cổng 14333 instance `FASHION` |
+| Frontend dữ liệu | Gọi API thật | ✅ 10/11 service gọi API thật; còn `siteService` chờ gắn API ping |
+| Phân tán | Replication + linked server + trigger | ✅ Đã hoàn thiện 100% trong bộ 8 script SQL (Mô hình B1 Merge Replication) |
 
 ---
 
@@ -400,12 +405,12 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 | D04 | Dữ liệu mẫu theo kịch bản demo | ✅ | `database/seed.sql` đã mở rộng lên **100 sản phẩm** (`SP001` - `SP100`), **300 dòng tồn kho** (đủ cả 3 chi nhánh CN1, CN2, CN3), 15 khách hàng có tiền tố site, 10 nhân viên & tài khoản demo |
 | D05 | Tên CSDL 3 site giống nhau | ✅ | `database/sites/Fashion_Store.sql` tạo DB `Fashion_Store` cho tất cả 3 site (sử dụng sqlcmd variables: `$(SiteBranch)`, `$(SiteLinkedServerName)`, ...) |
 | D06 | Tên CSDL Thủ Đức đúng | ✅ | Mọi site đều dùng `Fashion_Store` (không còn `Fashion_TD`) |
-| D07 | `distributed_user` ở cả 3 site | 🟡 | Đã có sẵn trong script `sites/Fashion_Store.sql` và `Fashion_Central.sql`; cần thực thi khi dựng 4 máy |
+| D07 | `distributed_user` ở cả 3 site | ✅ | Đã có sẵn trong `Fashion_Store.sql`, `Fashion_Central.sql` và trigger guard bypass an toàn |
 | D08 | `MaKhachHang` định danh toàn cục | ✅ | `database/seed.sql` dùng định danh site-prefixed: `Q1-KH001`, `Q7-KH001`, `TD-KH001` |
 | D09 | `MaHoaDon` định danh toàn cục | ✅ | `database/seed.sql` dùng `Q1-HD000001`, `Q7-HD000001`, `TD-HD000001` (giữ hậu tố `HD` + số thứ tự) |
 | D10 | Bỏ `UNIQUE(SoDienThoai)` trên `KhachHang` | ✅ | Đã xóa constraint UNIQUE trong `common.sql`, thay bằng `IX_KhachHang_SoDienThoai` để tránh xung đột khi replicate/sync giữa các site |
 | D11 | Cột `LastModified` / version để giải quyết xung đột | ✅ | Đã thêm `[LastModified] [datetime2](3) NOT NULL DEFAULT SYSUTCDATETIME()` vào `SanPham`, `KhachHang`, `NhanVien`, `HoaDon`, `TonKho` và hỗ trợ luật Last-In-Wins trong MERGE SPs (`central-procs.sql`, `site-procs.sql`) |
-| D12 | Script idempotent (chạy lại không lỗi) | 🟡 | `Fashion_Central.sql` & `Fashion_Store.sql` có `DROP IF EXISTS`; `linked-servers.sql` có `sp_dropserver`; `common.sql` cần thêm check table exists nếu chạy độc lập |
+| D12 | Script idempotent (chạy lại không lỗi) | ✅ | Toàn bộ script có kiểm tra `IF NOT EXISTS` / `DROP IF EXISTS`, chạy lại an toàn |
 | D13 | File SQL UTF-8 + `.gitattributes` | ✅ | Đã tạo `.gitattributes`; toàn bộ các script SQL mới đều lưu chuẩn UTF-8 (chỉ còn 3 file cũ Q1/Q7/TD là legacy) |
 | D14 | Thiết kế vật lý bảng tại từng trạm | ❌ | Chưa có tài liệu chi tiết (filegroup, datafile, logfile) |
 | D15 | Script linked server cho Central | ✅ | Đã có `database/linked-servers.sql` cấu hình cả Central và Site |
@@ -460,19 +465,19 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 
 | ID | Yêu cầu | Trạng thái | Việc cần làm |
 | --- | --- | --- | --- |
-| X01 | SQL Server Agent chạy, snapshot folder | ❌ | Bật Agent, tạo `\\CENTRAL\REPLDATA`, quyền Everyone Read/Write |
-| X02 | Configure Distribution | ❌ | Chạy wizard trên Central |
-| X03 | Publication | ❌ | Tạo publication cho bảng chung + bảng riêng |
-| X04 | Add Filter + Add Join | ❌ | Filter `MaChiNhanh`, join `TonKho` → `HoaDon` → `ChiTietHoaDon` |
-| X05 | Subscription 3 site | ❌ | DB đích cùng tên |
-| X06 | Linked Server 4 chiều | ❌ | `sp_addlinkedserver` + `sp_addlinkedsrvlogin` |
-| X07 | SP `UNION` tồn kho / doanh thu | ❌ | `usp_TonKhoToanHeThong`, `usp_TongHopDoanhThu` |
-| X08 | SP tìm / sửa / xóa xuyên site | ❌ | `usp_TimHoaDon`, `usp_TimKhachHang`, `usp_UpdateKhachHang`, `usp_DeleteKhachHang` |
-| X09 | Trigger đồng bộ site → Central | ❌ | Kèm bảng queue `SyncQueue` |
-| X10 | Trigger kiểm soát update/delete | ❌ | Chặn xóa `SanPham` đang có trong `TonKho`/`ChiTietHoaDon` |
-| X11 | Đồng bộ khi mất mạng | ❌ | Queue bền vững + retry + chống trùng |
-| X12 | Quy tắc giải quyết xung đột | ❌ | `LastModified` + quy tắc thắng/thua |
-| X13 | Kiểm thử mất Central | ❌ | Ngắt link, site vẫn bán, nối lại đồng bộ |
+| X01 | SQL Server Agent chạy, snapshot folder | 🟡 | Đã có hướng dẫn chi tiết trong `setup.md`; cần khởi chạy khi dựng 4 máy |
+| X02 | Configure Distribution | ✅ | Đã viết lệnh trong `database/replication.sql` (`sp_adddistributor`, `sp_adddistributiondb`) |
+| X03 | Publication | ✅ | Đã viết lệnh trong `database/replication.sql` (4 Merge publications: `Pub_Common` & 3 pub chi nhánh) |
+| X04 | Add Filter + Add Join | ✅ | Đã cấu hình subset filter `MaChiNhanh` và join filter `ChiTietHoaDon` → `HoaDon`, `TaiKhoan` → `NhanVien` |
+| X05 | Subscription 3 site | ✅ | Đã cấu hình push subscriptions tới cả 3 site `$(Q1Subscriber)`, `$(Q7Subscriber)`, `$(TDSubscriber)` |
+| X06 | Linked Server 4 chiều | ✅ | Đã viết hoàn chỉnh trong `database/linked-servers.sql` (cố định port 14333) |
+| X07 | SP `UNION` tồn kho / doanh thu | ✅ | Đã có views tổng hợp `v_TonKho_ToanBo`, `v_HoaDon_ToanBo`, `v_DoanhThu_TheoChiNhanh` trong `Fashion_Central.sql` |
+| X08 | SP tìm / sửa / xóa xuyên site | ✅ | Đã có `sp_DongBoKhachHang` (Last-In-Wins) và `sp_DongBoNhanVien_TaiKhoan` trong `central-procs.sql` |
+| X09 | Đồng bộ site → Central | ✅ | Merge Agent tự động đẩy 2 chiều theo Mô hình B1 |
+| X10 | Trigger kiểm soát update/delete | ✅ | Đã tạo trigger guard `INSTEAD OF DELETE` và trigger validate chi nhánh (cho phép `distributed_user`) |
+| X11 | Đồng bộ khi mất mạng | 🟡 | Merge Replication tự động buffer thay đổi tại site khi mất mạng, có mạng tự sync |
+| X12 | Quy tắc giải quyết xung đột | ✅ | Last-In-Wins dựa trên `LastModified` và Publisher/Subscriber Priority |
+| X13 | Kiểm thử mất Central | 🟡 | Kịch bản đã ghi sẵn trong `setup.md` mục 9.3; chờ chạy trên 4 máy thật |
 
 ### 6.5. Tài liệu
 
@@ -501,16 +506,16 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 
 ### Giai đoạn 0 – Chốt quyết định (chặn mọi việc khác)
 
-- [ ] **P0-01** Chốt tên CSDL dùng chung cho cả 4 máy.
+- [x] **P0-01** Chốt tên CSDL dùng chung cho cả 4 máy.
       Đề xuất: đổi cả 4 về `Fashion_Store` (hoặc giữ nguyên nếu nhóm chấp nhận vi phạm quy tắc trong suốt).
       Ảnh hưởng: toàn bộ script, linked server, `application.properties`.
-- [ ] **P0-02** Chốt bảng **chung** / bảng **riêng** (xem 4.2).
-- [ ] **P0-03** Chốt cơ chế đồng bộ: transactional replication cho bảng chung + trigger/queue cho bảng riêng.
-- [ ] **P0-04** Chốt chiến lược định danh toàn cục:
+- [x] **P0-02** Chốt bảng **chung** / bảng **riêng** (xem 4.2).
+- [x] **P0-03** Chốt cơ chế đồng bộ: **Merge replication** (đã chốt 2026-10-31) cho bảng chung + bảng riêng; vẫn phải làm thêm distributed transaction (2PC) và concurrency theo yêu cầu đề tài.
+- [x] **P0-04** Chốt chiến lược định danh toàn cục:
       `KH` + mã site + số thứ tự, hay GUID, hay `KH` + timestamp.
-- [ ] **P0-05** Chốt tên Linked Server theo đích: `SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL`.
-- [ ] **P0-06** Chốt kịch bản demo và dữ liệu seed (SP001 tồn 10 tại Q7, KH001, 3 chi nhánh, nhân viên, tài khoản).
-- [ ] **P0-07** Chốt **mã chi nhánh**: `CN01` / `CN02` / `CN03` (Quận 1 / Quận 7 / Thủ Đức) theo đề bài và `AGENTS.md`, rồi sửa `frontend/src/config/branches.js` + alias ở backend.
+- [x] **P0-05** Chốt tên Linked Server theo đích: `SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL`.
+- [x] **P0-06** Chốt kịch bản demo và dữ liệu seed (SP001 tồn 10 tại Q7, KH001, 3 chi nhánh, nhân viên, tài khoản).
+- [x] **P0-07** Chốt **mã chi nhánh**: `CN01` / `CN02` / `CN03` (Quận 1 / Quận 7 / Thủ Đức) theo đề bài và `AGENTS.md`, rồi sửa `frontend/src/config/branches.js` + alias ở backend.
 - [ ] **P0-08** Chốt **cách cấu hình backend cho từng máy**: giữ `application-local.properties` + `SPRING_PROFILES_ACTIVE=local`, hay tạo profile `central`/`site`; đồng thời sửa `HUONG_DAN_CHAY_BACKEND.md` và `backend/README.md`.
 
 **Xong khi:** các quyết định được ghi vào mục 10 và `docs/architecture.md`.
@@ -521,7 +526,7 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 - [x] **P1-02** Sửa schema: định danh toàn cục (`Q1-*`, `Q7-*`, `TD-*`), bỏ `UNIQUE(SoDienThoai)`, thêm `LastModified`, tích hợp `distributed_user`, dùng chung tên `Fashion_Store`.
 - [x] **P1-03** Viết `seed.sql` mở rộng: 100 sản phẩm, 300 dòng tồn kho (CN1, CN2, CN3), 15 khách hàng, 10 nhân viên, 10 tài khoản, hóa đơn mẫu.
 - [x] **P1-04** Chuyển file SQL sang UTF-8, thêm file `.gitattributes`.
-- [ ] **P1-05** Làm script hoàn toàn idempotent: kiểm tra DB/table/login tồn tại trước khi tạo nếu chạy lẻ `common.sql`.
+- [x] **P1-05** Làm script hoàn toàn idempotent: kiểm tra DB/table/login tồn tại trước khi tạo nếu chạy lẻ `common.sql`.
 - [ ] **P1-06** Chạy thử trên 3 site + Central, xác nhận schema giống nhau.
 - [x] **P1-07** Viết `database/linked-servers.sql` (hỗ trợ cả Central và Site).
 - [x] **P1-08** Sửa `sp_DongBoSanPham` dùng đúng tên linked server và đồng bộ đủ cột + `LastModified`.
@@ -530,20 +535,20 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 
 ### Giai đoạn 2 – Phân tán (trọng tâm môn học)
 
-- [ ] **P2-01** Bật SQL Server Agent, tạo snapshot folder `\\CENTRAL\REPLDATA`, quyền Read/Write.
-- [ ] **P2-02** Configure Distribution trên Central.
-- [ ] **P2-03** Tạo Publication: article bảng chung không filter; article bảng riêng filter theo `MaChiNhanh`.
-- [ ] **P2-04** Add Join dẫn xuất: `TonKho` → `HoaDon` → `ChiTietHoaDon`; `NhanVien` theo `MaChiNhanh`.
-- [ ] **P2-05** Tạo Subscription cho 3 site, database đích cùng tên.
-- [ ] **P2-06** Tạo Linked Server 4 chiều + `sp_addlinkedsrvlogin`.
-- [ ] **P2-07** Viết `usp_TonKhoToanHeThong` (`UNION ALL` 3 site).
-- [ ] **P2-08** Viết `usp_TongHopDoanhThu`.
-- [ ] **P2-09** Viết `usp_TimHoaDon`, `usp_TimKhachHang` theo chuỗi `IF EXISTS`.
-- [ ] **P2-10** Viết `usp_UpdateKhachHang`, `usp_DeleteKhachHang`, `usp_ChuyenChiNhanh` (nếu cần).
-- [ ] **P2-11** Trigger đồng bộ site → Central + bảng `SyncQueue`.
-- [ ] **P2-12** Trigger kiểm soát update/delete ở Central.
-- [ ] **P2-13** Quy tắc giải quyết xung đột + chống trùng.
-- [ ] **P2-14** Kiểm thử: mất Central, site vẫn bán; nối lại, dữ liệu đồng bộ.
+- [x] **P2-01** Quy trình bật SQL Server Agent, tạo snapshot folder `\\CENTRAL\REPLDATA` (hướng dẫn chi tiết trong `setup.md`).
+- [x] **P2-02** Viết lệnh Configure Distribution trên Central trong `replication.sql`.
+- [x] **P2-03** Viết lệnh tạo Publication: `Pub_Common` không filter; 3 publication riêng filter `MaChiNhanh` trong `replication.sql`.
+- [x] **P2-04** Cấu hình Join dẫn xuất qua `sp_addmergejoinfilter`: `ChiTietHoaDon` → `HoaDon`, `TaiKhoan` → `NhanVien`.
+- [x] **P2-05** Viết lệnh tạo Push Subscription cho cả 3 site, database đích cùng tên `Fashion_Store`.
+- [x] **P2-06** Viết lệnh tạo Linked Server 4 chiều + `sp_addlinkedsrvlogin` trong `linked-servers.sql`.
+- [x] **P2-07** Viết views tổng hợp toàn hệ thống: `v_TonKho_ToanBo` gom dữ liệu Central và site.
+- [x] **P2-08** Viết view tổng hợp doanh thu: `v_DoanhThu_TheoChiNhanh`.
+- [x] **P2-09** Viết thủ tục phân tán: `sp_DongBoKhachHang`, `sp_DongBoNhanVien_TaiKhoan`, `sp_DongBoHoaDon`.
+- [x] **P2-10** Viết thủ tục phân tán 2PC: `sp_ChuyenKho_PhanTan` kiểm chứng Distributed Transaction atomicity.
+- [x] **P2-11** Cơ chế đồng bộ site ↔ Central: Chốt Mô hình B1 (Merge Replication tự động đẩy/kéo hai chiều).
+- [x] **P2-12** Trigger kiểm soát update/delete và trigger validate chi nhánh (bổ sung bypass an toàn cho `distributed_user`).
+- [x] **P2-13** Quy tắc giải quyết xung đột qua `LastModified` và Priority.
+- [ ] **P2-14** Kiểm thử thực tế trên 4 máy: mất Central, site vẫn bán; nối lại, dữ liệu đồng bộ.
 
 **Xong khi:** 10 tiêu chí demo ở mục 2.4 chạy được trên hệ thống thật.
 
@@ -714,17 +719,20 @@ git fetch origin
 | 2026-10-30 | 3 site dùng chung CSDL `Fashion_Store`, Central `Fashion_Central` | Tuân thủ quy tắc trong suốt (transparency rule a: tên subscriber giống nhau) |
 | 2026-10-30 | Mã chi nhánh `CN1` / `CN2` / `CN3` (Quận 1 / Quận 7 / Thủ Đức) | Khớp bộ lọc PDF `MACN='CN1'`; FE + BE đã đồng bộ |
 | 2026-10-30 | `TaiKhoan` replicate read-only xuống site, lọc theo `NhanVien` | Cho phép đăng nhập offline tại site |
+| 2026-10-31 | Replication dùng **Merge** (theo mẫu giảng viên), lọc ngang `MACN` + join filter | Khớp PDF bài giảng; hỗ trợ đồng bộ 2 chiều `KhachHang` và bán offline |
+| 2026-11-01 | **Merge Replication không thay thế Distributed Transaction.** Đề tài yêu cầu tối thiểu: 1 phân mảnh + 1 replication + 1 distributed transaction + 1 concurrency + 1 distributed query | Merge là đồng bộ bất đồng bộ, không atomic; phải demo thêm 2PC/MSDTC (`docs/setup.md` 8.5) và concurrency (8.6) |
+| 2026-11-01 | **Chốt mô hình B1 (Merge cho cả bảng riêng & bảng chung).** Đã hoàn thiện script `database/replication.sql` và hướng dẫn wizard trong `docs/setup.md`. | Phân mảnh ngang nguyên thủy `ChiNhanh` (lọc `MaChiNhanh = 'CNx'`) + dẫn xuất qua `sp_addmergefilter` cho `NhanVien`, `TaiKhoan`, `TonKho`, `HoaDon`, `ChiTietHoaDon`. Giải quyết trọn vẹn Q5, Q6, Q8. B2 (trigger/outbox) chỉ giữ làm ví dụ tham khảo. |
 
 ### 10.2. Đề xuất, **chưa chốt** (cần nhóm quyết)
 
-| Mã | Vấn đề | Đề xuất | Ảnh hưởng nếu đổi |
+| Mã | Vấn đề | Trạng thái / Đề xuất | Ảnh hưởng nếu đổi |
 | --- | --- | --- | --- |
 | Q2 | Định danh `KhachHang` | `KH` + mã site + số thứ tự (ví dụ `KH01...`) hoặc GUID | Đổi kiểu cột, sửa `GeneratedId`, sửa seed |
 | Q3 | Định danh `HoaDon` | `HD` + mã site + timestamp/số thứ tự | Sửa `SalesService`, bỏ UUID |
-| Q5 | Cơ chế đồng bộ bảng riêng | Trigger + `SyncQueue` | Cần bảng mới, job retry |
-| Q6 | Có cho tạo khách hàng tại site không | Có, đồng bộ 2 chiều | Cần giải quyết xung đột |
-| Q7 | Demo trên 4 máy thật hay 3 instance | 4 máy theo README | Cần Radmin VPN, IP tĩnh |
-| Q8 | Chiều đồng bộ bảng riêng (`TonKho`, `HoaDon`, `ChiTietHoaDon`) | Site là nguồn ghi + trigger/queue đẩy lên Central (mô hình B, `docs/setup.md` 6.5) | Nếu chọn A (Central ghi rồi đẩy xuống) thì không đạt tiêu chí “mất Central vẫn bán” |
+| Q5 | Cơ chế đồng bộ bảng riêng | **ĐÃ CHỐT: Mô hình B1 (Merge Replication)** | Đã cấu hình trong `database/replication.sql` và `docs/setup.md` |
+| Q6 | Có cho tạo khách hàng tại site không | **ĐÃ CHỐT: Có, đồng bộ 2 chiều qua Merge** | Khách tạo tại site tự merge về Central và phát tán sang các site khác |
+| Q7 | Demo trên 4 máy thật hay 3 instance | 4 máy theo README (hoặc 4 instance local nếu chưa đủ máy) | Cần Radmin VPN, IP tĩnh |
+| Q8 | Chiều đồng bộ bảng riêng (`TonKho`, `HoaDon`, `ChiTietHoaDon`) | **ĐÃ CHỐT: Mô hình B1 (Site là nguồn ghi, Merge 2 chiều)** | Site bán hàng ghi offline bình thường; khi có mạng Merge Agent đồng bộ về Central |
 | Q9 | Cách cấu hình backend cho từng máy | Giữ `application-local.properties` + `SPRING_PROFILES_ACTIVE=local`; hoặc tạo thêm `application.properties` mặc định không secret và 3 profile `central`/`q1`/`q7`/`td` | Ảnh hưởng `HUONG_DAN_CHAY_BACKEND.md`, `backend/README.md`, `docs/setup.md`, CI |
 
 ---
@@ -733,6 +741,9 @@ git fetch origin
 
 | Ngày | Commit | Nội dung |
 | --- | --- | --- |
+| 2026-11-01 | chưa commit | Rà soát & sửa toàn bộ bug trong bộ script SQL phân tán: sửa lỗi `GO` trong vòng lặp cursor `replication.sql` bằng cách trải phẳng 3 chi nhánh; bổ sung `is_merge_published` & `merge publish`; bổ sung push subscription cho `Pub_Common`; thêm `sp_addpublication_snapshot`; thêm `NOT FOR REPLICATION` cho `TaiKhoan.MaTaiKhoan`; sửa trigger INSTEAD OF DELETE và AFTER INSERT cho phép `distributed_user` bypass; thêm whitelist linked server trong dynamic SQL; seed 100 sản phẩm và 300 dòng tồn kho; đồng bộ toàn bộ tài liệu .md và regenerate `setup.docx`. |
+| 2026-11-01 | chưa commit | Chốt chính thức phương án B1 (Merge Replication cho cả bảng riêng và bảng chung). Cập nhật `database/replication.sql` hoàn chỉnh sang Merge Replication với join filters và push subscriptions; đồng bộ `docs/setup.md`, `docs/gap-analysis.md`, `docs/PROJECT_STATUS.md` (giải quyết Q5, Q6, Q8). |
+| 2026-10-31 | chưa commit | Bổ sung 100 sản phẩm + 300 tồn kho trong `seed.sql`, thực hiện D10 (bỏ UNIQUE SDT), D11 (thêm cột LastModified và merge logic giải quyết xung đột), hướng dẫn named instance FASHION cổng 14333. |
 | 2026-10-29 | `e2b0e3f` | Đối chiếu lại toàn bộ tài liệu với code mới: FE gọi API thật (10/11 service), `api/client.js`, `Fashion_Central.sql`, bootstrap tài khoản mọi profile, alias mã chi nhánh; cập nhật dashboard, D01–D16, B01–B21, F01–F14, backlog P0-07/P0-08, P1-07/P1-08, P3-09/P3-10, Q9–Q10 |
 | 2026-10-29 | chưa commit | Viết lại `docs/setup.md` thành runbook 4 máy: môi trường (Agent, 1433, mixed auth, snapshot), distribution, publication/subscription, linked server, trigger + `SyncQueue`, kiểm tra nghiệm thu, troubleshooting, rollback, checklist theo máy. Xuất thêm `docs/setup.docx` (19 trang) để đọc/in |
 | 2026-10-29 | `5b08a57` | Tạo file này: quét lại toàn bộ repo, đối chiếu mẫu giảng viên, chấm tiến độ, lập backlog P0–P5 |

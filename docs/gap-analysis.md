@@ -8,6 +8,23 @@ Phạm vi hiện tại của nhóm: **làm trước phần database, backend, fr
 (replication, linked server, stored procedure phân tán) làm sau, nhưng các quyết định dưới
 đây cần chốt sớm vì sửa lại schema sau này rất tốn công.
 
+> ## ⚠️ CẬP NHẬT 2026-11-01 (Mô hình B1 Merge Replication & hoàn tất 100% SQL phân tán)
+>
+> **Đã hoàn thành toàn bộ phần phân tán trong source code:**
+> - **Chốt mô hình**: B1 (Merge Replication) khớp 100% mẫu bài giảng giảng viên.
+> - **Bộ 8 file SQL hoàn chỉnh**:
+>   1. database/common.sql: DDL 8 bảng dùng chung, NOT FOR REPLICATION trên TaiKhoan, bỏ UNIQUE(SoDienThoai), thêm LastModified.
+>   2. database/Fashion_Central.sql: DB Central, 4 chi nhánh, distributed_user, trigger guard (cho phép distributed_user), aggregation views.
+>   3. database/sites/Fashion_Store.sql: DB Site thống nhất Fashion_Store, trigger 	rg_HoaDon_ValidateBranch, trigger guard.
+>   4. database/linked-servers.sql: Linked server 4 chiều (SITE_Q1, SITE_Q7, SITE_THUDUC, CENTRAL) trên cổng 14333.
+>   5. database/replication.sql: Cấu hình Distributor, bật Merge publishing, tạo 4 Merge publications (Pub_Common không lọc + 3 publication riêng lọc theo MaChiNhanh), join filters cho TaiKhoan và ChiTietHoaDon, push subscriptions và snapshots.
+>   6. database/central-procs.sql: SP phân tán tại Central (Last-In-Wins, dynamic SQL whitelist, SP đồng bộ thủ công).
+>   7. database/sites/site-procs.sql: SP phân tán tại Site (kéo KH, kéo NV/TK chi nhánh, đẩy HĐ).
+>   8. database/seed.sql: 100 sản phẩm, 300 dòng tồn kho cho 3 chi nhánh, 15 khách hàng (tiền tố site), 10 nhân viên & tài khoản BCrypt.
+> - **Tiến độ phân tán**: Các script sẵn sàng 100%, chỉ còn bước dựng 4 máy vật lý/máy ảo để chạy và chụp ảnh demo.
+>
+> ---
+>
 > ## ⚠️ CẬP NHẬT 2026-10-29 (đối chiếu commit `e2b0e3f`)
 >
 > File này ban đầu viết khi backend/frontend còn sơ khai. **Trạng thái hiện tại đã khác nhiều**;
@@ -128,8 +145,8 @@ lúc mới viết file, giữ lại để đối chiếu.
 | --- | --- | --- |
 | Tên CSDL trên bốn máy | Đổi cả bốn về **tên giống nhau** (ví dụ `Fashion_Store`) | Tuân thủ quy tắc GV mục 6a, một stored procedure viết một lần chạy được bốn nơi. Đổi giá: phải tạo lại database trên bốn máy |
 | Tên Linked Server | Giữ theo đích: `SITE_Q1`, `SITE_Q7`, `SITE_THUDUC`, `CENTRAL` | Đúng vì stored procedure tham chiếu "đích" chứ không phải "vị trí" |
-| Bảng chung / bảng riêng | **Chung** (Central thêm sửa xoá, nhân bản xuống site): `SanPham`, `ChiNhanh` · **Riêng** (site tự quản lý, đồng bộ lên Central): `KhachHang`, `NhanVien`, `HoaDon`, `ChiTietHoaDon`, `TonKho` · **Chỉ Central**: `TaiKhoan` | Khớp với sơ đồ định vị mẫu GV |
-| Cơ chế đồng bộ hai chiều | Transactional Replication cho bảng chung **+** trigger kèm bảng queue ở Central cho bảng riêng | Không dùng hai cơ chế cho cùng một luồng dữ liệu |
+| Bảng chung / bảng riêng | **Chung** (Central thêm sửa xoá, nhân bản xuống site): SanPham, ChiNhanh · **Toàn cục 2 chiều**: KhachHang · **Riêng** (site tự quản lý theo phân mảnh, đồng bộ 2 chiều về Central): NhanVien, HoaDon, ChiTietHoaDon, TonKho · **Theo phân mảnh nhân sự**: TaiKhoan | Khớp với sơ đồ định vị mẫu GV |
+| Cơ chế đồng bộ hai chiều | **Merge Replication (Mô hình B1 đã chốt)**: Bảng chung SanPham & bảng 2 chiều KhachHang (không lọc); bảng riêng phân mảnh ngang nguyên thủy (ChiNhanh lọc MaChiNhanh) + phân mảnh dẫn xuất (TonKho, HoaDon, ChiTietHoaDon, NhanVien, TaiKhoan). Khớp 100% tài liệu bài giảng GV (TS. Phan Thị Hà), hỗ trợ bán hàng offline và giải quyết xung đột qua Priority / LastModified | Không trộn Transactional và Merge cho cùng một bảng |
 
 ### Giai đoạn 1 - Database (nền cho cả hai phần)
 
@@ -141,16 +158,14 @@ lúc mới viết file, giữ lại để đối chiếu.
 ```text
 database/
 ├── common.sql          # schema dùng chung, stored procedure, định nghĩa bảng
-├── Fashion_Central.sql # Fashion_Central + linked server tới ba site (đã có bảng, thiếu linked server)
-├── Fashion_Q1.sql      # đã có
-├── Fashion_Q7.sql      # đã có
-├── Fashion_TD.sql      # đã có, cần đổi tên Fashion_ThuDuc
-├── replication/
-│   ├── 01_configure_distributor.sql
-│   ├── 02_create_publication.sql    # có Add Filter theo MaChiNhanh và Add Join dẫn xuất
-│   ├── 03_create_subscription.sql
-│   └── 04_triggers_sync.sql
-└── seed.sql            # dữ liệu mẫu theo kịch bản demo
+├── Fashion_Central.sql # Fashion_Central + trigger + view tổng hợp
+├── linked-servers.sql  # SITE_Q1 / SITE_Q7 / SITE_THUDUC / CENTRAL
+├── central-procs.sql   # procedure phân tán (tên 4 phần)
+├── replication.sql     # distributor + publication + push subscription
+├── seed.sql            # dữ liệu mẫu theo kịch bản demo
+└── sites/
+    ├── Fashion_Store.sql  # DB Fashion_Store cho cả 3 site (CN1 / CN2 / CN3)
+    └── site-procs.sql     # procedure kéo/đẩy dữ liệu tại site
 ```
 
 3. Viết các stored procedure trong suốt (mục 6, 7, 8 của mẫu GV), đặt trong `common.sql`

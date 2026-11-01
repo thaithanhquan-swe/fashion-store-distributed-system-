@@ -19,11 +19,14 @@ GO
 -- "central" on the Central machine, "site" on Q1 / Q7 / Thủ Đức
 :setvar Role "central"
 
--- Machine name or IP of each node (instance name after a backslash if named)
-:setvar CentralHost "192.168.1.10"
-:setvar Q1Host      "192.168.1.11"
-:setvar Q7Host      "192.168.1.12"
-:setvar TDHost      "192.168.1.13"
+-- Machine name or IP + port of each node.
+-- This project uses the named instance FASHION on fixed port 14333, so append
+-- ",14333" (no SQL Server Browser / UDP 1434 needed).
+-- Using "<IP>\FASHION" also works but requires SQL Server Browser + UDP 1434.
+:setvar CentralHost "192.168.1.10,14333"
+:setvar Q1Host      "192.168.1.11,14333"
+:setvar Q7Host      "192.168.1.12,14333"
+:setvar TDHost      "192.168.1.13,14333"
 
 -- Must match the password used when the login was created (site/Central scripts)
 :setvar DistributedPassword "Fashion@123456"

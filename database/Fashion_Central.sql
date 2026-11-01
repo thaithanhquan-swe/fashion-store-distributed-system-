@@ -28,7 +28,7 @@ GO
 CREATE DATABASE [Fashion_Central];
 GO
 
--- FULL recovery is required for transactional replication.
+-- FULL recovery supports Merge replication (snapshot + change tracking).
 ALTER DATABASE [Fashion_Central] SET RECOVERY FULL;
 GO
 
@@ -92,6 +92,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[SanPham] t
+        JOIN deleted d ON t.MaSanPham = d.MaSanPham;
+        RETURN;
+    END;
     RAISERROR (N'Không được xóa SanPham trực tiếp trên Central. Dữ liệu được đồng bộ từ các site.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
@@ -103,6 +110,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[KhachHang] t
+        JOIN deleted d ON t.MaKhachHang = d.MaKhachHang;
+        RETURN;
+    END;
     RAISERROR (N'Không được xóa KhachHang trực tiếp trên Central. Dữ liệu được đồng bộ 2 chiều.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
@@ -114,6 +128,13 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[NhanVien] t
+        JOIN deleted d ON t.MaNhanVien = d.MaNhanVien;
+        RETURN;
+    END;
     RAISERROR (N'Không được xóa NhanVien trực tiếp trên Central. Dữ liệu được đồng bộ từ các site.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
@@ -125,95 +146,35 @@ INSTEAD OF DELETE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF SYSTEM_USER = 'distributed_user'
+    BEGIN
+        DELETE t
+        FROM [dbo].[TaiKhoan] t
+        JOIN deleted d ON t.MaTaiKhoan = d.MaTaiKhoan;
+        RETURN;
+    END;
     RAISERROR (N'Không được xóa TaiKhoan trực tiếp trên Central. Dữ liệu được đồng bộ từ các site.', 16, 1);
     ROLLBACK TRANSACTION;
 END;
 GO
 
 -- -------------------------------------------------
--- 7. REPLICATION SETUP TEMPLATE (run on Central after linked servers exist)
---    Uses SQL Server Transactional Replication with filtering on MaChiNhanh
+-- 7. REPLICATION SETUP — see `database/replication.sql`
+--    Chốt B1 (Merge Replication). Chạy script `database/replication.sql`
+--    trên Central sau khi linked servers và database đã sẵn sàng.
+--    Không cần chạy các lệnh dưới đây (đã tổng hợp trong replication.sql).
 -- -------------------------------------------------
 /*
--- STEP 1: Configure Distributor (run once on Central)
-EXEC sp_adddistributor @distributor = @@SERVERNAME, @password = N'<DIST_ADMIN_PASSWORD>';
-EXEC sp_adddistributiondb @database = N'distribution', @data_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL17.MSSQLSERVER\MSSQL\DATA', @log_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL17.MSSQLSERVER\MSSQL\DATA';
-EXEC sp_adddistpublisher @publisher = @@SERVERNAME, @distribution_db = N'distribution', @security_mode = 1;
-
--- STEP 2: Create Publications (one per site, filtered by MaChiNhanh)
--- Publication for Q1 (CN1)
-EXEC sp_addpublication
-    @publication = N'Pub_Fashion_Store_Q1',
-    @description = N'Replication to Quận 1 (CN1), filtered by MaChiNhanh = CN1',
-    @sync_method = N'native',
-    @retention = 0,
-    @allow_push = N'true',
-    @allow_pull = N'false',
-    @snapshot_in_defaultfolder = N'true',
-    @compress_snapshot = N'true',
-    @ftp_address = N'',
-    @allow_anonymous = N'false',
-    @enabled_for_internet = N'false',
-    @independent_agent = N'true',
-    @replication_frequency = N'continuous',
-    @status = N'active';
-
-EXEC sp_addpublication_snapshot
-    @publication = N'Pub_Fashion_Store_Q1',
-    @frequency_type = 4, @frequency_interval = 1, @frequency_subday = 8, @frequency_subday_interval = 15;
-
--- Add articles with row filter
-EXEC sp_addarticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'SanPham',
-    @source_object = N'SanPham',
-    @type = N'logbased',
-    @description = N'Product master (Central -> Site, read-only on site)',
-    @schema_option = 0x000000000803509F;
-
-EXEC sp_addarticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'KhachHang',
-    @source_object = N'KhachHang',
-    @type = N'logbased',
-    @description = N'Customer master (two-way)',
-    @schema_option = 0x000000000803509F;
-
-EXEC sp_addarticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'NhanVien',
-    @source_object = N'NhanVien',
-    @type = N'logbased',
-    @description = N'Employees filtered by MaChiNhanh = CN1',
-    @schema_option = 0x000000000803509F,
-    @filter_clause = N'MaChiNhanh = ''CN1''';
-
-EXEC sp_addarticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'TaiKhoan',
-    @source_object = N'TaiKhoan',
-    @type = N'logbased',
-    @description = N'Accounts filtered by NhanVien.MaChiNhanh = CN1',
-    @schema_option = 0x000000000803509F;
--- Note: TaiKhoan filter requires join filter on NhanVien
-
--- Repeat for Q7 (Pub_Fashion_Store_Q7, filter MaChiNhanh = 'CN2')
--- Repeat for Thủ Đức (Pub_Fashion_Store_ThuDuc, filter MaChiNhanh = 'CN3')
-
--- STEP 3: Create Subscriptions (on each site machine)
--- Run on Q1 machine:
-EXEC sp_addsubscription
-    @publication = N'Pub_Fashion_Store_Q1',
-    @subscriber = N'<Q1_MACHINE_NAME>',
-    @destination_db = N'Fashion_Store',
-    @subscription_type = N'push',
-    @sync_type = N'automatic',
-    @article = N'all',
-    @update_mode = N'read only',
-    @subscriber_type = 0;
-
--- STEP 4: Create Snapshot folder share for all machines
--- Share C:\ReplicationSnapshot with read/write for distributed_user on all 4 machines.
+-- STEP 1: Configure Distributor (run once on Central) — xem replication.sql
+-- STEP 2: Create Publications — xem replication.sql (sp_addmergepublication)
+--   Pub_Common: SanPham, ChiNhanh, KhachHang (không lọc, push tat ca site)
+--   Pub_Fashion_Store_Q1/Q7/ThuDuc: NhanVien, TaiKhoan, TonKho, HoaDon,
+--     ChiTietHoaDon (loc MaChiNhanh, join filter ChiTietHoaDon -> HoaDon,
+--     TaiKhoan -> NhanVien)
+-- STEP 3: Create Subscriptions — xem replication.sql (sp_addmergesubscription +
+--   sp_addmergepushsubscription_agent)
+-- STEP 4: Start snapshot agents — xem replication.sql (sp_startpublication_snapshot)
+-- STEP 5: Share snapshot folder cho tat ca machine
 */
 
 -- -------------------------------------------------

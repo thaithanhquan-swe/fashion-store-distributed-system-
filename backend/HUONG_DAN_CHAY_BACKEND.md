@@ -12,10 +12,13 @@ Tài liệu này hướng dẫn chi tiết từng bước để bất kỳ thàn
 2. **Microsoft SQL Server**:
    - SQL Server 2019 / 2022 (Developer hoặc Standard edition).
    - Đã bật xác thực **SQL Server and Windows Authentication mode** (tài khoản `sa`).
-   - Đã bật TCP/IP trên cổng mặc định `1433`.
+   - Đã bật TCP/IP cho **named instance `FASHION`** trên cổng cố định **`14333`**
+     (máy có thể vẫn chạy instance mặc định ở `1433` — đừng nhầm hai cổng này).
 3. **Database**:
-   - Tên database: `application-local.properties` mẫu đang trỏ `Fashion_Q1`; đổi `spring.datasource.url` theo máy (Central / Q1 / Q7 / Thủ Đức).
-   - Mở SQL Server Management Studio (SSMS) và chạy script tạo database và bảng từ thư mục `database/` (ví dụ `database/Fashion_Q1.sql` hoặc script central).
+   - Tên database: 3 site dùng chung `Fashion_Store`, Central dùng `Fashion_Central`.
+     File mẫu `application-local.properties` đang trỏ `Fashion_Q1` (tên cũ) — phải sửa.
+   - Mở SQL Server Management Studio (SSMS), kết nối `localhost\FASHION`, rồi chạy script
+     trong `database/` (`Fashion_Central.sql` hoặc `sites/Fashion_Store.sql`).
 
 ---
 
@@ -42,9 +45,11 @@ Mở `backend/src/main/resources/application.properties` và sửa:
 1. **Tên database** — chọn đúng database của máy:
    ```properties
    # Central
-   spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=Fashion_Central;encrypt=true;trustServerCertificate=true
-   # Q1
-   spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=Fashion_Q1;encrypt=true;trustServerCertificate=true
+   spring.datasource.url=jdbc:sqlserver://localhost:14333;databaseName=Fashion_Central;encrypt=true;trustServerCertificate=true
+   # Q1 / Q7 / Thủ Đức (giống nhau, cùng tên database)
+   spring.datasource.url=jdbc:sqlserver://localhost:14333;databaseName=Fashion_Store;encrypt=true;trustServerCertificate=true
+   # Nếu muốn dùng tên instance thay vì cổng (cần SQL Server Browser + UDP 1434):
+   # spring.datasource.url=jdbc:sqlserver://localhost;instanceName=FASHION;databaseName=Fashion_Store;encrypt=true;trustServerCertificate=true
    ```
 
 2. **Mật khẩu SQL Server**:
@@ -86,7 +91,7 @@ rồi truyền mật khẩu / URL / khóa JWT qua biến môi trường:
 ```powershell
 cd backend
 $env:SPRING_PROFILES_ACTIVE = "local"
-$env:SPRING_DATASOURCE_URL = "jdbc:sqlserver://localhost:1433;databaseName=Fashion_Q1;encrypt=true;trustServerCertificate=true"
+$env:SPRING_DATASOURCE_URL = "jdbc:sqlserver://localhost:14333;databaseName=Fashion_Store;encrypt=true;trustServerCertificate=true"
 $env:SPRING_DATASOURCE_PASSWORD = "<mat_khau_sql_server_cua_ban>"
 $env:JWT_SIGNER_KEY = "<chuoi_khoa_bi_mat_jwt_hs512_toi_thieu_64_bytes>"
 .\mvnw.cmd spring-boot:run
@@ -144,7 +149,7 @@ Sau khi chạy backend, bạn mở trình duyệt web lên và kiểm tra:
 | **`Login failed for user 'sa'`** | Mật khẩu `sa` của SQL Server không khớp. | Kiểm tra lại mật khẩu `spring.datasource.password` trong file `application.properties`. Hãy thử đăng nhập vào SSMS bằng tài khoản `sa` với mật khẩu đó trước. |
 | **`Failed to configure a DataSource` / không có URL database** | Chưa có `application.properties` và chưa bật profile `local`. | Làm mục 2: copy `application-local.properties` → `application.properties`, hoặc đặt `SPRING_PROFILES_ACTIVE=local`. |
 | **`Cannot open database "Fashion_Central"`** | Chưa có database trong SQL Server hoặc `spring.datasource.url` trỏ sai tên. | Mở SSMS, chạy đúng file `database/Fashion_*.sql`; sửa `databaseName=` cho khớp máy. |
-| **`The TCP/IP connection to the host localhost, port 1433 has failed`** | Dịch vụ SQL Server chưa bật cổng TCP/IP. | Mở `SQL Server Configuration Manager` > `SQL Server Network Configuration` > `Protocols for MSSQLSERVER` > Bật **TCP/IP** thành `Enabled` > Khởi động lại service SQL Server. |
+| **`The TCP/IP connection to the host localhost, port 14333 has failed`** | Instance `FASHION` chưa bật TCP/IP hoặc đang trỏ sai cổng (`1433` là instance mặc định). | `SQL Server Configuration Manager` > `SQL Server Network Configuration` > `Protocols for FASHION` > **TCP/IP** = `Enabled`, `IPAll` → `TCP Port = 14333`, `TCP Dynamic Ports` để trống > restart service `SQL Server (FASHION)`. |
 | **`JWT signer key must be at least 64 bytes for HS512`** | Chưa cấu hình hoặc cấu hình chuỗi bí mật JWT quá ngắn. | Đảm bảo file `application.properties` (hoặc biến môi trường `JWT_SIGNER_KEY`) có cấu hình `jwt.signerKey` với chuỗi bí mật độ dài tối thiểu 64 bytes (512 bits) để bảo mật cho thuật toán HS512. |
 | **`Address already in use: bind (port 8080)`** | Đang có ứng dụng khác chạy chiếm cổng 8080. | Tìm và tắt tiến trình đang chiếm cổng 8080 bằng lệnh `netstat -ano \| findstr :8080` rồi `taskkill /F /PID <PID>`, hoặc đổi cổng backend thành `server.port=8081`. |
 | **`Lỗi CORS khi gọi từ Frontend`** | Frontend Vite chạy ở port khác `5173`. | Kiểm tra file `application.properties` có dòng `app.cors.allowed-origins=http://localhost:5173`. |

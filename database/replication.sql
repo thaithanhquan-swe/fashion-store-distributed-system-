@@ -1,5 +1,6 @@
 -- =====================================================================
--- TRANSACTIONAL REPLICATION — Central (publisher + distributor) -> 3 sites
+-- MERGE REPLICATION — Central (publisher + distributor) -> 3 sites
+-- Chốt B1 (Merge) theo mục 0.4 của docs/setup.md.
 --
 -- Run on the CENTRAL machine AFTER:
 --   1) linked-servers.sql        (role = central)
@@ -9,9 +10,11 @@
 --   5) seed.sql
 --
 -- Prerequisites:
---   * SQL Server Agent is running on Central (push subscriptions run there).
+--   * SQL Server Agent is running on Central (Merge Agent và Snapshot Agent chạy ở đây).
 --   * The snapshot folder is shared and reachable by all 4 machines, e.g.
---         net share REPLDATA=C:\Replication\Snapshot /GRANT:Everyone,FULL
+--         New-Item -ItemType Directory -Path D:\ReplData -Force
+--         New-SmbShare -Name REPLDATA -Path D:\ReplData -FullAccess Everyone
+--     then set SnapshotShare below to \\<CENTRAL-PC>\REPLDATA
 --   * distributed_user exists on Central and on every site (created by the
 --     database scripts) with db_datareader + db_datawriter.
 --
@@ -25,10 +28,12 @@ GO
 -- -------------------------------------------------
 -- CONFIG — EDIT BEFORE RUNNING
 -- -------------------------------------------------
+-- Tất cả máy dùng named instance FASHION trên cổng 14333, nên tên subscriber
+-- phải kèm cổng: "<IP>,14333".
 :setvar SnapshotShare      "\\CENTRAL-PC\REPLDATA"
-:setvar Q1Subscriber       "192.168.1.11"
-:setvar Q7Subscriber       "192.168.1.12"
-:setvar TDSubscriber       "192.168.1.13"
+:setvar Q1Subscriber       "192.168.1.11,14333"
+:setvar Q7Subscriber       "192.168.1.12,14333"
+:setvar TDSubscriber       "192.168.1.13,14333"
 :setvar DistributorPassword "Fashion@123456"
 :setvar SubscriberPassword  "Fashion@123456"
 
@@ -64,174 +69,667 @@ ELSE
 GO
 
 -- -------------------------------------------------
--- 2. ENABLE PUBLISHING ON Fashion_Central
+-- 2. ENABLE MERGE PUBLISHING ON Fashion_Central
 -- -------------------------------------------------
 USE [Fashion_Central];
 GO
 
+IF (SELECT is_merge_published FROM sys.databases WHERE name = N'Fashion_Central') = 0
+BEGIN
+    EXEC sp_replicationdboption
+        @dbname = N'Fashion_Central', @optname = N'merge publish', @value = N'true';
+    PRINT N'Enabled merge publish on Fashion_Central.';
+END
+GO
+
 IF (SELECT is_published FROM sys.databases WHERE name = N'Fashion_Central') = 0
+BEGIN
     EXEC sp_replicationdboption
         @dbname = N'Fashion_Central', @optname = N'publish', @value = N'true';
+    PRINT N'Enabled publish on Fashion_Central.';
+END
 GO
 
 -- -------------------------------------------------
--- 3. PUBLICATIONS + ARTICLES + PUSH SUBSCRIPTIONS
---    One publication per site; NhanVien and TaiKhoan are row-filtered by
---    MaChiNhanh (TaiKhoan via a subquery on NhanVien).
+-- 3. PUBLICATION 1: Pub_Common (SanPham, ChiNhanh, KhachHang)
+--    Publish tới cả 3 site: Q1, Q7, Thủ Đức
 -- -------------------------------------------------
-DECLARE @sites TABLE (
-    Branch     varchar(10)  NOT NULL,
-    Publication sysname     NOT NULL,
-    Subscriber  sysname     NOT NULL
-);
-
-INSERT INTO @sites (Branch, Publication, Subscriber) VALUES
-    ('CN1', N'Pub_Fashion_Store_Q1',     N'$(Q1Subscriber)'),
-    ('CN2', N'Pub_Fashion_Store_Q7',     N'$(Q7Subscriber)'),
-    ('CN3', N'Pub_Fashion_Store_ThuDuc', N'$(TDSubscriber)');
-
-DECLARE @Branch varchar(10), @Pub sysname, @Sub sysname;
-DECLARE @Filter nvarchar(400), @TkFilter nvarchar(400);
-
-DECLARE site_cur CURSOR LOCAL FAST_FORWARD FOR
-    SELECT Branch, Publication, Subscriber FROM @sites;
-
-OPEN site_cur;
-FETCH NEXT FROM site_cur INTO @Branch, @Pub, @Sub;
-
-WHILE @@FETCH_STATUS = 0
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergepublications WHERE name = N'Pub_Common')
 BEGIN
-    -- Drop a previous definition so the script can be re-run
-    IF EXISTS (SELECT 1 FROM dbo.syspublications WHERE name = @Pub)
-    BEGIN
-        EXEC sp_dropsubscription @publication = @Pub, @article = N'all', @subscriber = N'all';
-        EXEC sp_droppublication  @publication = @Pub;
-    END
-
-    EXEC sp_addpublication
-        @publication        = @Pub,
-        @description        = N'Fashion_Store snapshot for branch ' + @Branch,
-        @sync_method        = N'native',
-        @retention          = 0,
-        @allow_push         = N'true',
-        @allow_pull         = N'false',
-        @allow_anonymous    = N'false',
-        @enabled_for_internet = N'false',
-        @independent_agent  = N'true',
-        @immediate_sync     = N'false',
-        @repl_freq          = N'continuous',
-        @status             = N'active';
+    EXEC sp_addmergepublication
+        @publication = N'Pub_Common',
+        @description = N'Bang chung: SanPham, ChiNhanh, KhachHang — push tat ca site',
+        @status = N'active',
+        @allow_push = N'true',
+        @allow_pull = N'true',
+        @repl_freq = N'continuous',
+        @independent_agent = N'true',
+        @retention = 14,
+        @history_retention = 48;
 
     EXEC sp_addpublication_snapshot
-        @publication              = @Pub,
-        @frequency_type           = 4,   -- daily
-        @frequency_interval       = 1,
-        @frequency_subday         = 8,   -- hours
-        @frequency_subday_interval = 12;
-
-    -- Product master: full copy, read-only on the site
-    EXEC sp_addarticle
-        @publication        = @Pub,
-        @article            = N'SanPham',
-        @source_object      = N'SanPham',
-        @type               = N'logbased',
-        @schema_option      = 0x000000000803509F,
-        @pre_creation_cmd   = N'none',
-        @description        = N'SanPham (Central -> site, read-only)';
-
-    -- Customers: full copy; site -> Central changes use sp_DongBoKhachHang
-    EXEC sp_addarticle
-        @publication        = @Pub,
-        @article            = N'KhachHang',
-        @source_object      = N'KhachHang',
-        @type               = N'logbased',
-        @schema_option      = 0x000000000803509F,
-        @pre_creation_cmd   = N'none',
-        @description        = N'KhachHang (two-way via linked-server procedure)';
-
-    -- Employees: only this branch
-    SET @Filter = N'MaChiNhanh = ''' + @Branch + N'''';
-    EXEC sp_addarticle
-        @publication        = @Pub,
-        @article            = N'NhanVien',
-        @source_object      = N'NhanVien',
-        @type               = N'logbased',
-        @schema_option      = 0x000000000803509F,
-        @pre_creation_cmd   = N'none',
-        @filter_clause      = @Filter,
-        @description        = N'NhanVien filtered by branch';
-
-    -- Accounts: only accounts of this branch's employees (offline login)
-    SET @TkFilter = N'MaNhanVien IN (SELECT MaNhanVien FROM NhanVien WHERE MaChiNhanh = '''
-                    + @Branch + N''')';
-    EXEC sp_addarticle
-        @publication        = @Pub,
-        @article            = N'TaiKhoan',
-        @source_object      = N'TaiKhoan',
-        @type               = N'logbased',
-        @schema_option      = 0x000000000803509F,
-        @pre_creation_cmd   = N'none',
-        @filter_clause      = @TkFilter,
-        @description        = N'TaiKhoan filtered by NhanVien.MaChiNhanh';
-
-    -- Push subscription to the site
-    EXEC sp_addsubscription
-        @publication       = @Pub,
-        @subscriber        = @Sub,
-        @destination_db    = N'Fashion_Store',
-        @subscription_type = N'push',
-        @sync_type         = N'automatic',
-        @article           = N'all',
-        @update_mode       = N'read only';
-
-    EXEC sp_addpushsubscription_agent
-        @publication             = @Pub,
-        @subscriber              = @Sub,
-        @subscriber_db           = N'Fashion_Store',
-        @job_login               = NULL,   -- use the SQL Server Agent account
-        @job_password            = NULL,
-        @subscriber_security_mode = 0,     -- SQL login on the subscriber
-        @subscriber_login        = N'distributed_user',
-        @subscriber_password     = N'$(SubscriberPassword)',
-        @frequency_type          = 4,
-        @frequency_interval      = 1,
-        @frequency_subday        = 8,
+        @publication = N'Pub_Common',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
         @frequency_subday_interval = 1;
 
-    PRINT N'Publication created: ' + @Pub + N' -> ' + @Sub + N' (Fashion_Store)';
-
-    FETCH NEXT FROM site_cur INTO @Branch, @Pub, @Sub;
+    PRINT N'Merge publication Pub_Common created.';
 END
+GO
 
-CLOSE site_cur;
-DEALLOCATE site_cur;
+-- Article SanPham (khong loc)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'SanPham' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Common'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Common',
+        @article = N'SanPham',
+        @source_object = N'SanPham',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'SanPham — danh muc chung';
+END
+GO
+
+-- Article ChiNhanh (khong loc)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'ChiNhanh' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Common'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Common',
+        @article = N'ChiNhanh',
+        @source_object = N'ChiNhanh',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'ChiNhanh — danh muc chung';
+END
+GO
+
+-- Article KhachHang (khong loc, dong bo hai chieu qua Merge)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'KhachHang' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Common'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Common',
+        @article = N'KhachHang',
+        @source_object = N'KhachHang',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'KhachHang — dong bo hai chieu';
+END
+GO
+
+-- Push Subscriptions for Pub_Common to all 3 sites
+-- To Q1
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergesubscriptions WHERE pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Common') AND subscriber_server = N'$(Q1Subscriber)')
+BEGIN
+    EXEC sp_addmergesubscription
+        @publication = N'Pub_Common',
+        @subscriber = N'$(Q1Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @subscription_type = N'push',
+        @subscriber_type = 0,
+        @sync_type = N'automatic',
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @priority = 1;
+
+    EXEC sp_addmergepushsubscription_agent
+        @publication = N'Pub_Common',
+        @subscriber = N'$(Q1Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @job_login = NULL,
+        @job_password = NULL,
+        @subscriber_security_mode = 0,
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Push subscription Pub_Common -> $(Q1Subscriber) created.';
+END
+GO
+
+-- To Q7
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergesubscriptions WHERE pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Common') AND subscriber_server = N'$(Q7Subscriber)')
+BEGIN
+    EXEC sp_addmergesubscription
+        @publication = N'Pub_Common',
+        @subscriber = N'$(Q7Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @subscription_type = N'push',
+        @subscriber_type = 0,
+        @sync_type = N'automatic',
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @priority = 1;
+
+    EXEC sp_addmergepushsubscription_agent
+        @publication = N'Pub_Common',
+        @subscriber = N'$(Q7Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @job_login = NULL,
+        @job_password = NULL,
+        @subscriber_security_mode = 0,
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Push subscription Pub_Common -> $(Q7Subscriber) created.';
+END
+GO
+
+-- To Thu Duc
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergesubscriptions WHERE pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Common') AND subscriber_server = N'$(TDSubscriber)')
+BEGIN
+    EXEC sp_addmergesubscription
+        @publication = N'Pub_Common',
+        @subscriber = N'$(TDSubscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @subscription_type = N'push',
+        @subscriber_type = 0,
+        @sync_type = N'automatic',
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @priority = 1;
+
+    EXEC sp_addmergepushsubscription_agent
+        @publication = N'Pub_Common',
+        @subscriber = N'$(TDSubscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @job_login = NULL,
+        @job_password = NULL,
+        @subscriber_security_mode = 0,
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Push subscription Pub_Common -> $(TDSubscriber) created.';
+END
 GO
 
 -- -------------------------------------------------
--- 4. START THE SNAPSHOT AGENTS (needs SQL Server Agent running)
+-- 4. PUBLICATION 2: Pub_Fashion_Store_Q1 (Branch CN1 -> Q1)
+--    NhanVien, TaiKhoan, TonKho, HoaDon, ChiTietHoaDon (filtered CN1)
 -- -------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1')
+BEGIN
+    EXEC sp_addmergepublication
+        @publication = N'Pub_Fashion_Store_Q1',
+        @description = N'Bang rieng chi nhanh CN1 (loc MaChiNhanh = ''CN1'')',
+        @status = N'active',
+        @allow_push = N'true',
+        @allow_pull = N'true',
+        @repl_freq = N'continuous',
+        @independent_agent = N'true',
+        @retention = 14,
+        @history_retention = 48;
+
+    EXEC sp_addpublication_snapshot
+        @publication = N'Pub_Fashion_Store_Q1',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Merge publication Pub_Fashion_Store_Q1 created.';
+END
+GO
+
+-- NhanVien (subset filter MaChiNhanh = 'CN1')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'NhanVien' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'NhanVien',
+        @source_object = N'NhanVien',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN1''',
+        @description = N'NhanVien loc theo MaChiNhanh = CN1';
+END
+GO
+
+-- TaiKhoan (join filter via NhanVien)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'TaiKhoan' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'TaiKhoan',
+        @source_object = N'TaiKhoan',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'TaiKhoan — join filter qua NhanVien';
+
+    EXEC sp_addmergejoinfilter
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'TaiKhoan',
+        @join_article = N'NhanVien',
+        @join_filterclause = N'TaiKhoan.[MaNhanVien] = NhanVien.[MaNhanVien]',
+        @join_unique_key = 1,
+        @type = 1;
+END
+GO
+
+-- TonKho (subset filter MaChiNhanh = 'CN1')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'TonKho' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'TonKho',
+        @source_object = N'TonKho',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN1''',
+        @description = N'TonKho loc theo MaChiNhanh = CN1';
+END
+GO
+
+-- HoaDon (subset filter MaChiNhanh = 'CN1')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'HoaDon' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'HoaDon',
+        @source_object = N'HoaDon',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN1''',
+        @description = N'HoaDon loc theo MaChiNhanh = CN1';
+END
+GO
+
+-- ChiTietHoaDon (join filter via HoaDon)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'ChiTietHoaDon' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'ChiTietHoaDon',
+        @source_object = N'ChiTietHoaDon',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'ChiTietHoaDon — join filter qua HoaDon';
+
+    EXEC sp_addmergejoinfilter
+        @publication = N'Pub_Fashion_Store_Q1',
+        @article = N'ChiTietHoaDon',
+        @join_article = N'HoaDon',
+        @join_filterclause = N'ChiTietHoaDon.[MaHoaDon] = HoaDon.[MaHoaDon]',
+        @join_unique_key = 1,
+        @type = 1;
+END
+GO
+
+-- Push subscription to Q1
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergesubscriptions WHERE pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q1') AND subscriber_server = N'$(Q1Subscriber)')
+BEGIN
+    EXEC sp_addmergesubscription
+        @publication = N'Pub_Fashion_Store_Q1',
+        @subscriber = N'$(Q1Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @subscription_type = N'push',
+        @subscriber_type = 0,
+        @sync_type = N'automatic',
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @priority = 1;
+
+    EXEC sp_addmergepushsubscription_agent
+        @publication = N'Pub_Fashion_Store_Q1',
+        @subscriber = N'$(Q1Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @job_login = NULL,
+        @job_password = NULL,
+        @subscriber_security_mode = 0,
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Push subscription Pub_Fashion_Store_Q1 -> $(Q1Subscriber) created.';
+END
+GO
+
+-- -------------------------------------------------
+-- 5. PUBLICATION 3: Pub_Fashion_Store_Q7 (Branch CN2 -> Q7)
+--    NhanVien, TaiKhoan, TonKho, HoaDon, ChiTietHoaDon (filtered CN2)
+-- -------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7')
+BEGIN
+    EXEC sp_addmergepublication
+        @publication = N'Pub_Fashion_Store_Q7',
+        @description = N'Bang rieng chi nhanh CN2 (loc MaChiNhanh = ''CN2'')',
+        @status = N'active',
+        @allow_push = N'true',
+        @allow_pull = N'true',
+        @repl_freq = N'continuous',
+        @independent_agent = N'true',
+        @retention = 14,
+        @history_retention = 48;
+
+    EXEC sp_addpublication_snapshot
+        @publication = N'Pub_Fashion_Store_Q7',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Merge publication Pub_Fashion_Store_Q7 created.';
+END
+GO
+
+-- NhanVien (subset filter MaChiNhanh = 'CN2')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'NhanVien' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'NhanVien',
+        @source_object = N'NhanVien',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN2''',
+        @description = N'NhanVien loc theo MaChiNhanh = CN2';
+END
+GO
+
+-- TaiKhoan (join filter via NhanVien)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'TaiKhoan' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'TaiKhoan',
+        @source_object = N'TaiKhoan',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'TaiKhoan — join filter qua NhanVien';
+
+    EXEC sp_addmergejoinfilter
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'TaiKhoan',
+        @join_article = N'NhanVien',
+        @join_filterclause = N'TaiKhoan.[MaNhanVien] = NhanVien.[MaNhanVien]',
+        @join_unique_key = 1,
+        @type = 1;
+END
+GO
+
+-- TonKho (subset filter MaChiNhanh = 'CN2')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'TonKho' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'TonKho',
+        @source_object = N'TonKho',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN2''',
+        @description = N'TonKho loc theo MaChiNhanh = CN2';
+END
+GO
+
+-- HoaDon (subset filter MaChiNhanh = 'CN2')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'HoaDon' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'HoaDon',
+        @source_object = N'HoaDon',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN2''',
+        @description = N'HoaDon loc theo MaChiNhanh = CN2';
+END
+GO
+
+-- ChiTietHoaDon (join filter via HoaDon)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'ChiTietHoaDon' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'ChiTietHoaDon',
+        @source_object = N'ChiTietHoaDon',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'ChiTietHoaDon — join filter qua HoaDon';
+
+    EXEC sp_addmergejoinfilter
+        @publication = N'Pub_Fashion_Store_Q7',
+        @article = N'ChiTietHoaDon',
+        @join_article = N'HoaDon',
+        @join_filterclause = N'ChiTietHoaDon.[MaHoaDon] = HoaDon.[MaHoaDon]',
+        @join_unique_key = 1,
+        @type = 1;
+END
+GO
+
+-- Push subscription to Q7
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergesubscriptions WHERE pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_Q7') AND subscriber_server = N'$(Q7Subscriber)')
+BEGIN
+    EXEC sp_addmergesubscription
+        @publication = N'Pub_Fashion_Store_Q7',
+        @subscriber = N'$(Q7Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @subscription_type = N'push',
+        @subscriber_type = 0,
+        @sync_type = N'automatic',
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @priority = 1;
+
+    EXEC sp_addmergepushsubscription_agent
+        @publication = N'Pub_Fashion_Store_Q7',
+        @subscriber = N'$(Q7Subscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @job_login = NULL,
+        @job_password = NULL,
+        @subscriber_security_mode = 0,
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Push subscription Pub_Fashion_Store_Q7 -> $(Q7Subscriber) created.';
+END
+GO
+
+-- -------------------------------------------------
+-- 6. PUBLICATION 4: Pub_Fashion_Store_ThuDuc (Branch CN3 -> Thu Duc)
+--    NhanVien, TaiKhoan, TonKho, HoaDon, ChiTietHoaDon (filtered CN3)
+-- -------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc')
+BEGIN
+    EXEC sp_addmergepublication
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @description = N'Bang rieng chi nhanh CN3 (loc MaChiNhanh = ''CN3'')',
+        @status = N'active',
+        @allow_push = N'true',
+        @allow_pull = N'true',
+        @repl_freq = N'continuous',
+        @independent_agent = N'true',
+        @retention = 14,
+        @history_retention = 48;
+
+    EXEC sp_addpublication_snapshot
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Merge publication Pub_Fashion_Store_ThuDuc created.';
+END
+GO
+
+-- NhanVien (subset filter MaChiNhanh = 'CN3')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'NhanVien' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'NhanVien',
+        @source_object = N'NhanVien',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN3''',
+        @description = N'NhanVien loc theo MaChiNhanh = CN3';
+END
+GO
+
+-- TaiKhoan (join filter via NhanVien)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'TaiKhoan' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'TaiKhoan',
+        @source_object = N'TaiKhoan',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'TaiKhoan — join filter qua NhanVien';
+
+    EXEC sp_addmergejoinfilter
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'TaiKhoan',
+        @join_article = N'NhanVien',
+        @join_filterclause = N'TaiKhoan.[MaNhanVien] = NhanVien.[MaNhanVien]',
+        @join_unique_key = 1,
+        @type = 1;
+END
+GO
+
+-- TonKho (subset filter MaChiNhanh = 'CN3')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'TonKho' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'TonKho',
+        @source_object = N'TonKho',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN3''',
+        @description = N'TonKho loc theo MaChiNhanh = CN3';
+END
+GO
+
+-- HoaDon (subset filter MaChiNhanh = 'CN3')
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'HoaDon' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'HoaDon',
+        @source_object = N'HoaDon',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @subset_filterclause = N'MaChiNhanh = ''CN3''',
+        @description = N'HoaDon loc theo MaChiNhanh = CN3';
+END
+GO
+
+-- ChiTietHoaDon (join filter via HoaDon)
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergearticles WHERE name = N'ChiTietHoaDon' AND pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc'))
+BEGIN
+    EXEC sp_addmergearticle
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'ChiTietHoaDon',
+        @source_object = N'ChiTietHoaDon',
+        @type = N'logbased',
+        @schema_option = 0x000000000803509F,
+        @pre_creation_cmd = N'none',
+        @description = N'ChiTietHoaDon — join filter qua HoaDon';
+
+    EXEC sp_addmergejoinfilter
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @article = N'ChiTietHoaDon',
+        @join_article = N'HoaDon',
+        @join_filterclause = N'ChiTietHoaDon.[MaHoaDon] = HoaDon.[MaHoaDon]',
+        @join_unique_key = 1,
+        @type = 1;
+END
+GO
+
+-- Push subscription to Thu Duc
+IF NOT EXISTS (SELECT 1 FROM dbo.sysmergesubscriptions WHERE pubid = (SELECT pubid FROM dbo.sysmergepublications WHERE name = N'Pub_Fashion_Store_ThuDuc') AND subscriber_server = N'$(TDSubscriber)')
+BEGIN
+    EXEC sp_addmergesubscription
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @subscriber = N'$(TDSubscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @subscription_type = N'push',
+        @subscriber_type = 0,
+        @sync_type = N'automatic',
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @priority = 1;
+
+    EXEC sp_addmergepushsubscription_agent
+        @publication = N'Pub_Fashion_Store_ThuDuc',
+        @subscriber = N'$(TDSubscriber)',
+        @subscriber_db = N'Fashion_Store',
+        @job_login = NULL,
+        @job_password = NULL,
+        @subscriber_security_mode = 0,
+        @subscriber_login = N'distributed_user',
+        @subscriber_password = N'$(SubscriberPassword)',
+        @frequency_type = 4,
+        @frequency_interval = 1,
+        @frequency_subday = 8,
+        @frequency_subday_interval = 1;
+
+    PRINT N'Push subscription Pub_Fashion_Store_ThuDuc -> $(TDSubscriber) created.';
+END
+GO
+
+-- -------------------------------------------------
+-- 7. START THE SNAPSHOT AGENTS (needs SQL Server Agent running)
+-- -------------------------------------------------
+EXEC sp_startpublication_snapshot @publication = N'Pub_Common';
 EXEC sp_startpublication_snapshot @publication = N'Pub_Fashion_Store_Q1';
 EXEC sp_startpublication_snapshot @publication = N'Pub_Fashion_Store_Q7';
 EXEC sp_startpublication_snapshot @publication = N'Pub_Fashion_Store_ThuDuc';
 GO
 
 -- -------------------------------------------------
--- 5. VERIFY
+-- 8. VERIFY
 -- -------------------------------------------------
-SELECT name, status, sync_method, repl_freq
-FROM dbo.syspublications
+SELECT name, description, status, repl_freq, retention
+FROM dbo.sysmergepublications
 ORDER BY name;
 
-SELECT p.name AS publication, s.subscriber, s.destination_db, s.subscription_type, s.status
-FROM dbo.syspublications p
-JOIN dbo.syssubscriptions s ON s.pubid = p.pubid
-ORDER BY p.name;
+SELECT p.name AS publication, s.subscriber_server AS subscriber, s.db_name AS destination_db,
+       s.subscription_type, s.status
+FROM dbo.sysmergesubscriptions s
+JOIN dbo.sysmergepublications p ON s.pubid = p.pubid
+ORDER BY p.name, s.subscriber_server;
 
-SELECT a.publication, a.article, a.filter_clause
-FROM dbo.sysarticles a
-ORDER BY a.publication, a.article;
-GO
+SELECT a.name AS article, a.subset_filterclause
+FROM dbo.sysmergearticles a
+ORDER BY a.name;
 
-PRINT N'Replication configured. Check the Snapshot Agent and Distribution Agent jobs in SSMS.';
-PRINT N'If a snapshot fails, verify the share $(SnapshotShare) is reachable from every machine.';
+PRINT N'Merge replication configured successfully. Check Snapshot Agent and Merge Agent jobs in SSMS Replication Monitor.';
+PRINT N'Ensure the share $(SnapshotShare) is accessible by the SQL Server Agent account from each subscriber machine.';
 GO

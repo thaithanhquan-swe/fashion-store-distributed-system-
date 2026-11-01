@@ -6,11 +6,10 @@
 
 Đã tạo cấu trúc `database/`, `backend/`, `frontend/` và `docs/` theo mục 12.
 
-- **Database:** 4 script tạo DB + 8 bảng (`Fashion_Central`, `Fashion_Q1`, `Fashion_Q7`, `Fashion_TD`).
-  Chưa có dữ liệu mẫu, chưa có replication / linked server / trigger.
+- **Database:** Đầy đủ 8 script SQL cho cả Central (Fashion_Central) và 3 site (Fashion_Store). Đã cấu hình Linked Server, Merge Replication (Mô hình B1 chốt), trigger kiểm soát chi nhánh/chỉ đọc, Stored Procedures phân tán và Seed data 100 sản phẩm.
 - **Backend:** Spring Boot REST API — 12 controller, 50 endpoint, 73 test pass.
-- **Frontend:** React + Vite — 30 trang, 10/11 service gọi API thật (chỉ `siteService` còn mock).
-- **Phân tán:** chưa triển khai (0%).
+- **Frontend:** React + Vite — 30 trang, 10/11 service gọi API thật (chỉ siteService còn mock).
+- **Phân tán:** Đã hoàn thiện 100% các script phân tán (Mô hình B1 Merge Replication, Linked Server 4 chiều, SP phân tán, Seed data).
 
 Tài liệu:
 
@@ -83,9 +82,9 @@ Cập nhật tồn kho
 
       STORE A Q1      STORE B Q7     STORE C THỦ ĐỨC
 
-      Fashion_Q1      Fashion_Q7     Fashion_ThuDuc
+     Fashion_Store   Fashion_Store   Fashion_Store
 
-         CN01            CN02              CN03
+          CN1             CN2             CN3
 ```
 
 Mô hình kết nối:
@@ -108,10 +107,10 @@ Central đóng vai trò trung tâm kết nối.
 
 | Máy   | Vai trò           | Database          | Mã chi nhánh |
 | ----- | ----------------- | ----------------- | ------------ |
-| Máy 1 | Central Server    | `Fashion_Central` | -            |
-| Máy 2 | Store A – Quận 1  | `Fashion_Q1`      | `CN01`       |
-| Máy 3 | Store B – Quận 7  | `Fashion_Q7`      | `CN02`       |
-| Máy 4 | Store C – Thủ Đức | `Fashion_ThuDuc`  | `CN03`       |
+| Máy 1 | Central Server    | Fashion_Central | CN0        |
+| Máy 2 | Store A – Quận 1  | Fashion_Store   | CN1        |
+| Máy 3 | Store B – Quận 7  | Fashion_Store   | CN2        |
+| Máy 4 | Store C – Thủ Đức | Fashion_Store   | CN3        |
 
 ---
 
@@ -533,10 +532,15 @@ fashion-store-distributed-system/
 ├── README.md
 │
 ├── database/
+│   ├── common.sql
 │   ├── Fashion_Central.sql
-│   ├── Fashion_Q1.sql
-│   ├── Fashion_Q7.sql
-│   └── Fashion_TD.sql
+│   ├── linked-servers.sql
+│   ├── central-procs.sql
+│   ├── replication.sql
+│   ├── seed.sql
+│   └── sites/
+│       ├── Fashion_Store.sql
+│       └── site-procs.sql
 │
 ├── backend/
 ├── frontend/
@@ -547,8 +551,9 @@ fashion-store-distributed-system/
 
 # 13. Ý nghĩa các file SQL
 
-> Cập nhật 2026-10-29: tên file thực tế là `Fashion_*.sql`. Cả 4 file đều **chỉ tạo DB + 8 bảng**,
-> chưa có dữ liệu mẫu (`INSERT`), chưa có linked server, chưa có replication.
+> Cập nhật 2026-11-01: 3 file cũ `Fashion_Q1.sql` / `Fashion_Q7.sql` / `Fashion_TD.sql`
+> (dump UTF-16 từ SSMS, tên DB riêng lẻ) **đã bị xóa**. Theo quy tắc trong suốt, cả 3 site
+> dùng chung `database/sites/Fashion_Store.sql`. Xem `docs/setup.md` mục 3.1 để biết thứ tự chạy.
 
 ## `database/Fashion_Central.sql`
 
@@ -566,42 +571,30 @@ Chạy trên **Máy 1 – Central**. Tạo:
 
 ---
 
-## `database/Fashion_Q1.sql`
+## `database/sites/Fashion_Store.sql`
 
-Chạy trên **Máy 2 – Store A Quận 1**. Tạo:
+Chạy trên **cả 3 máy site** (Q1 / Q7 / Thủ Đức). Mở đúng một khối `:setvar SiteBranch`
+(`CN1` / `CN2` / `CN3`) rồi chạy. Tạo:
 
 ```text
-- Database Fashion_Q1
+- Database Fashion_Store (giống nhau trên cả 3 site)
 - 8 bảng giống Central
+- 1 dòng ChiNhanh tương ứng chi nhánh của máy
 - CREATE USER distributed_user
 ```
 
 ---
 
-## `database/Fashion_Q7.sql`
-
-Chạy trên **Máy 3 – Store B Quận 7**. Tạo `Fashion_Q7` + 8 bảng.
-**Thiếu `distributed_user`** → phải chạy thêm mục 2.7 của `docs/setup.md`.
-
----
-
-## `database/Fashion_TD.sql`
-
-Chạy trên **Máy 4 – Store C Thủ Đức**. Tạo `Fashion_TD` + 8 bảng.
-**Tên DB sai** so với quy ước `Fashion_ThuDuc`; **thiếu `distributed_user`**.
-
----
-
-## Chưa có
+## Các file còn lại
 
 ```text
-database/common.sql        Schema/SP dùng chung
+database/common.sql        Schema/SP dùng chung (được :r bởi Fashion_Central.sql và sites/Fashion_Store.sql)
 database/seed.sql          Dữ liệu mẫu theo kịch bản demo
-database/linked-server.sql Script sp_addlinkedserver cho Central
-database/replication/      Publication + subscription + trigger
+database/linked-servers.sql Script sp_addlinkedserver (Central + 3 site, cổng 14333)
+database/central-procs.sql Procedure phân tán tên 4 phần
+database/sites/site-procs.sql Procedure kéo/đẩy dữ liệu tại site
+database/replication.sql   Distributor + publication + push subscription
 ```
-
-Xem `docs/PROJECT_STATUS.md` mục 7 (P1-01 → P1-08) để biết thứ tự làm.
 
 ---
 
@@ -1021,11 +1014,7 @@ Chạy file SQL tương ứng:
 ```text
 Máy 1 → database/Fashion_Central.sql
 
-Máy 2 → database/Fashion_Q1.sql
-
-Máy 3 → database/Fashion_Q7.sql
-
-Máy 4 → database/Fashion_TD.sql   (sẽ đổi thành Fashion_ThuDuc)
+Máy 2, 3, 4 → database/sites/Fashion_Store.sql  (mở đúng khối CN1 / CN2 / CN3)
 ```
 
 ## Bước 9
@@ -1058,19 +1047,26 @@ Test khi ngắt kết nối Central.
 
 # 30. Trạng thái database hiện tại
 
-Trong repo đã có **script tạo schema** cho 4 database (mỗi file 8 bảng):
+Trong repo đã có bộ script đầy đủ cho 4 database:
 
 ```text
-Fashion_Central.sql   -> Fashion_Central   (+ distributed_user, sp_DongBoSanPham)
-Fashion_Q1.sql        -> Fashion_Q1        (+ distributed_user)
-Fashion_Q7.sql        -> Fashion_Q7        (thiếu distributed_user)
-Fashion_TD.sql        -> Fashion_TD        (thiếu distributed_user, tên sai quy ước)
+Fashion_Central.sql        -> Fashion_Central  (+ distributed_user, trigger, view)
+sites/Fashion_Store.sql    -> Fashion_Store    (+ distributed_user, trigger) trên cả 3 site
+linked-servers.sql         -> SITE_Q1 / SITE_Q7 / SITE_THUDUC / CENTRAL
+central-procs.sql          -> procedure phân tán (tên 4 phần)
+sites/site-procs.sql       -> procedure kéo/đẩy dữ liệu tại site
+replication.sql            -> Distributor + publication + push subscription
+seed.sql                   -> dữ liệu mẫu
 ```
 
-**Chưa có dữ liệu mẫu:** cả 4 file đều **0 câu `INSERT`**. Database sau khi tạo sẽ trống;
-backend tự tạo tài khoản demo và chi nhánh `Local Demo Branch` (`CN001`).
+> 3 file cũ `Fashion_Q1.sql` / `Fashion_Q7.sql` / `Fashion_TD.sql` đã bị xóa: chúng là dump
+> SSMS (UTF-16, đường dẫn cứng) và mâu thuẫn với quy tắc "3 site dùng chung `Fashion_Store`".
 
-**Chưa có:** linked server, publication/subscription, trigger, `SyncQueue`, `seed.sql`.
+**Dữ liệu mẫu:** `seed.sql` tạo 100 sản phẩm, 300 dòng tồn kho cho CN1/CN2/CN3, 15 khách
+hàng, 10 nhân viên, 7 hóa đơn. Chạy sau `Fashion_Central.sql`.
+
+**Đã có:** linked server, publication/subscription (`replication.sql`), trigger,
+`SyncQueue` (mục 8 của `docs/setup.md`), `seed.sql`.
 
 Do đó các thành viên **không tự ý tạo database mới hoặc thay đổi cấu trúc bảng**.
 
