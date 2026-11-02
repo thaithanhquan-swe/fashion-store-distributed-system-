@@ -31,7 +31,7 @@ class BranchControllerTest {
     @BeforeEach
     void setUp() {
         sampleResponse = new BranchResponse(
-                "CN01",
+                "CN1",
                 "Chi nhánh Quận 1",
                 "123 Le Loi, Q1, TP.HCM",
                 "0901111111",
@@ -48,21 +48,21 @@ class BranchControllerTest {
         assertNotNull(response.getBody());
         assertEquals("Lấy danh sách chi nhánh thành công", response.getBody().getMessage());
         assertEquals(1, response.getBody().getResult().size());
-        assertEquals("CN01", response.getBody().getResult().get(0).branchId());
+        assertEquals("CN1", response.getBody().getResult().get(0).branchId());
         verify(branchService).getAll(true);
     }
 
     @Test
     void getById_success() {
-        when(branchService.getById("CN01")).thenReturn(sampleResponse);
+        when(branchService.getById("CN1")).thenReturn(sampleResponse);
 
-        ResponseEntity<ApiResponse<BranchResponse>> response = branchController.getById("CN01");
+        ResponseEntity<ApiResponse<BranchResponse>> response = branchController.getById("CN1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("Lấy thông tin chi nhánh thành công", response.getBody().getMessage());
-        assertEquals("CN01", response.getBody().getResult().branchId());
-        verify(branchService).getById("CN01");
+        assertEquals("CN1", response.getBody().getResult().branchId());
+        verify(branchService).getById("CN1");
     }
 
     @Test
@@ -72,14 +72,14 @@ class BranchControllerTest {
                 "123 Le Loi, Q1, TP.HCM",
                 "0901111111");
 
-        when(branchService.create(request)).thenReturn(sampleResponse);
+        when(branchService.create(request, "CN1")).thenReturn(sampleResponse);
 
-        ResponseEntity<ApiResponse<BranchResponse>> response = branchController.create(request);
+        ResponseEntity<ApiResponse<BranchResponse>> response = branchController.create("CN1", request);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("Tạo chi nhánh thành công", response.getBody().getMessage());
-        assertEquals("CN01", response.getBody().getResult().branchId());
-        verify(branchService).create(request);
+        assertEquals("CN1", response.getBody().getResult().branchId());
+        verify(branchService).create(request, "CN1");
     }
 }

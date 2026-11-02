@@ -40,7 +40,7 @@ class BranchServiceTest {
         branchService = new BranchService(branchRepository, branchMapper);
 
         branch1 = Branch.builder()
-                .branchId("CN01")
+                .branchId("CN1")
                 .branchName("Chi nhánh Quận 1")
                 .address("123 Le Loi, Q1, TP.HCM")
                 .phoneNumber("0901111111")
@@ -48,7 +48,7 @@ class BranchServiceTest {
                 .build();
 
         branch2 = Branch.builder()
-                .branchId("CN02")
+                .branchId("CN2")
                 .branchName("Chi nhánh Quận 7")
                 .address("456 Nguyen Thi Thap, Q7, TP.HCM")
                 .phoneNumber("0902222222")
@@ -63,8 +63,8 @@ class BranchServiceTest {
         List<BranchResponse> responses = branchService.getAll(null);
 
         assertEquals(2, responses.size());
-        assertEquals("CN01", responses.get(0).branchId());
-        assertEquals("CN02", responses.get(1).branchId());
+        assertEquals("CN1", responses.get(0).branchId());
+        assertEquals("CN2", responses.get(1).branchId());
         verify(branchRepository).findAll(any(Sort.class));
         verify(branchRepository, never()).findAllByActiveOrderByBranchIdAsc(anyBoolean());
     }
@@ -76,7 +76,7 @@ class BranchServiceTest {
         List<BranchResponse> responses = branchService.getAll(true);
 
         assertEquals(1, responses.size());
-        assertEquals("CN01", responses.get(0).branchId());
+        assertEquals("CN1", responses.get(0).branchId());
         verify(branchRepository).findAllByActiveOrderByBranchIdAsc(true);
         verify(branchRepository, never()).findAll(any(Sort.class));
     }
@@ -88,18 +88,18 @@ class BranchServiceTest {
         List<BranchResponse> responses = branchService.getAll(false);
 
         assertEquals(1, responses.size());
-        assertEquals("CN02", responses.get(0).branchId());
+        assertEquals("CN2", responses.get(0).branchId());
         verify(branchRepository).findAllByActiveOrderByBranchIdAsc(false);
     }
 
     @Test
     void getById_success() {
-        when(branchRepository.findById("CN01")).thenReturn(Optional.of(branch1));
+        when(branchRepository.findById("CN1")).thenReturn(Optional.of(branch1));
 
-        BranchResponse response = branchService.getById("CN01");
+        BranchResponse response = branchService.getById("CN1");
 
         assertNotNull(response);
-        assertEquals("CN01", response.branchId());
+        assertEquals("CN1", response.branchId());
         assertEquals("Chi nhánh Quận 1", response.branchName());
         assertEquals("123 Le Loi, Q1, TP.HCM", response.address());
     }
@@ -115,9 +115,9 @@ class BranchServiceTest {
 
     @Test
     void getById_notFound_throwsBranchNotFound() {
-        when(branchRepository.findById("CN99")).thenReturn(Optional.empty());
+        when(branchRepository.findById("CN1")).thenReturn(Optional.empty());
 
-        AppException ex = assertThrows(AppException.class, () -> branchService.getById("CN99"));
+        AppException ex = assertThrows(AppException.class, () -> branchService.getById("CN1"));
         assertEquals(ErrorCode.BRANCH_NOT_FOUND, ex.getErrorCode());
     }
 
@@ -128,13 +128,13 @@ class BranchServiceTest {
                 "789 Vo Van Ngan, TP. Thu Duc",
                 "0903333333");
 
-        when(branchRepository.findAllByBranchIdStartingWith("CN")).thenReturn(List.of(branch1, branch2));
+        when(branchRepository.existsById("CN3")).thenReturn(false);
         when(branchRepository.save(any(Branch.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BranchResponse response = branchService.create(request);
+        BranchResponse response = branchService.create(request, "CN3");
 
         assertNotNull(response);
-        assertEquals("CN003", response.branchId());
+        assertEquals("CN3", response.branchId());
         assertEquals("Chi nhánh Thủ Đức", response.branchName());
         assertTrue(response.active());
     }

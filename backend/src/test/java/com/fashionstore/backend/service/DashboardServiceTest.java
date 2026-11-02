@@ -76,13 +76,13 @@ class DashboardServiceTest {
 
     @BeforeEach
     void setUp() {
-        branchQ1 = Branch.builder().branchId("CN01").branchName("Chi nhánh Quận 1").active(true).build();
-        branchQ7 = Branch.builder().branchId("CN02").branchName("Chi nhánh Quận 7").active(true).build();
+        branchQ1 = Branch.builder().branchId("CN1").branchName("Chi nhánh Quận 1").active(true).build();
+        branchQ7 = Branch.builder().branchId("CN2").branchName("Chi nhánh Quận 7").active(true).build();
 
         employee1 = Employee.builder()
-                .employeeId("NV001").fullName("Nguyen Van A").branchId("CN01").active(true).build();
+                .employeeId("NV001").fullName("Nguyen Van A").branchId("CN1").active(true).build();
         employee2 = Employee.builder()
-                .employeeId("NV002").fullName("Tran Thi B").branchId("CN01").active(true).build();
+                .employeeId("NV002").fullName("Tran Thi B").branchId("CN1").active(true).build();
 
         product1 = Product.builder()
                 .productId("SP001").productName("Ao Thun").price(BigDecimal.valueOf(200000)).active(true).build();
@@ -104,11 +104,11 @@ class DashboardServiceTest {
         when(employeeRepository.findAll()).thenReturn(List.of(employee1, employee2));
 
         Invoice inv1 = Invoice.builder()
-                .invoiceId("HD001").branchId("CN01").customerId("KH001").employeeId("NV001")
+                .invoiceId("HD001").branchId("CN1").customerId("KH001").employeeId("NV001")
                 .createdAt(LocalDateTime.now().minusDays(1))
                 .totalAmount(BigDecimal.valueOf(400000)).status("COMPLETED").build();
         Invoice inv2 = Invoice.builder()
-                .invoiceId("HD002").branchId("CN02").customerId("KH002").employeeId("NV002")
+                .invoiceId("HD002").branchId("CN2").customerId("KH002").employeeId("NV002")
                 .createdAt(LocalDateTime.now())
                 .totalAmount(BigDecimal.valueOf(600000)).status("COMPLETED").build();
 
@@ -117,9 +117,9 @@ class DashboardServiceTest {
                 .thenReturn(Collections.emptyList()); // previous
 
         Inventory item1 = Inventory.builder()
-                .branchId("CN01").productId("SP001").quantity(3).minimumStock(5).build();
+                .branchId("CN1").productId("SP001").quantity(3).minimumStock(5).build();
         Inventory item2 = Inventory.builder()
-                .branchId("CN02").productId("SP002").quantity(0).minimumStock(5).build();
+                .branchId("CN2").productId("SP002").quantity(0).minimumStock(5).build();
         when(inventoryRepository.findAll()).thenReturn(List.of(item1, item2));
 
         InvoiceDetail detail1 = InvoiceDetail.builder()
@@ -171,19 +171,19 @@ class DashboardServiceTest {
         when(employeeRepository.findAll()).thenReturn(List.of(employee1));
 
         Invoice inv = Invoice.builder()
-                .invoiceId("HD001").branchId("CN01").customerId("KH001").employeeId("NV001")
+                .invoiceId("HD001").branchId("CN1").customerId("KH001").employeeId("NV001")
                 .createdAt(LocalDateTime.now())
                 .totalAmount(BigDecimal.valueOf(200000)).status("COMPLETED").build();
-        when(invoiceRepository.findAllByBranchIdAndCreatedAtBetween(eq("CN01"), any(), any()))
+        when(invoiceRepository.findAllByBranchIdAndCreatedAtBetween(eq("CN1"), any(), any()))
                 .thenReturn(List.of(inv))
                 .thenReturn(Collections.emptyList());
 
-        when(inventoryRepository.findAllByBranchId("CN01")).thenReturn(Collections.emptyList());
+        when(inventoryRepository.findAllByBranchId("CN1")).thenReturn(Collections.emptyList());
 
-        ManagerDashboardResponse response = dashboardService.getManagerDashboard("manager.q1", "CN01", 30);
+        ManagerDashboardResponse response = dashboardService.getManagerDashboard("manager.q1", "CN1", 30);
 
         assertNotNull(response);
-        assertEquals("CN01", response.branchId());
+        assertEquals("CN1", response.branchId());
         assertEquals("Chi nhánh Quận 1", response.branchName());
         assertEquals(BigDecimal.valueOf(200000), response.summary().revenue());
         assertEquals(1, response.summary().orders());
@@ -200,7 +200,7 @@ class DashboardServiceTest {
         when(employeeRepository.findById("NV001")).thenReturn(Optional.of(employee1));
 
         AppException ex = assertThrows(AppException.class,
-                () -> dashboardService.getManagerDashboard("manager.q1", "CN02", 30));
+                () -> dashboardService.getManagerDashboard("manager.q1", "CN2", 30));
         assertEquals(ErrorCode.ACCESS_DENIED, ex.getErrorCode());
     }
 
@@ -210,14 +210,14 @@ class DashboardServiceTest {
         when(branchRepository.findAll()).thenReturn(List.of(branchQ7));
         when(productRepository.findAll()).thenReturn(Collections.emptyList());
         when(employeeRepository.findAll()).thenReturn(Collections.emptyList());
-        when(invoiceRepository.findAllByBranchIdAndCreatedAtBetween(eq("CN02"), any(), any()))
+        when(invoiceRepository.findAllByBranchIdAndCreatedAtBetween(eq("CN2"), any(), any()))
                 .thenReturn(Collections.emptyList());
-        when(inventoryRepository.findAllByBranchId("CN02")).thenReturn(Collections.emptyList());
+        when(inventoryRepository.findAllByBranchId("CN2")).thenReturn(Collections.emptyList());
 
-        ManagerDashboardResponse response = dashboardService.getManagerDashboard("admin", "CN02", 30);
+        ManagerDashboardResponse response = dashboardService.getManagerDashboard("admin", "CN2", 30);
 
         assertNotNull(response);
-        assertEquals("CN02", response.branchId());
+        assertEquals("CN2", response.branchId());
     }
 
     @Test
@@ -227,7 +227,7 @@ class DashboardServiceTest {
         when(branchRepository.findAll()).thenReturn(List.of(branchQ1));
 
         Invoice todayInv = Invoice.builder()
-                .invoiceId("HD001").branchId("CN01").employeeId("NV002")
+                .invoiceId("HD001").branchId("CN1").employeeId("NV002")
                 .createdAt(LocalDateTime.now())
                 .totalAmount(BigDecimal.valueOf(300000)).status("COMPLETED").build();
 
@@ -243,7 +243,7 @@ class DashboardServiceTest {
         assertNotNull(response);
         assertEquals("NV002", response.employeeId());
         assertEquals("Tran Thi B", response.employeeName());
-        assertEquals("CN01", response.branchId());
+        assertEquals("CN1", response.branchId());
         assertEquals(BigDecimal.valueOf(300000), response.todayRevenue());
         assertEquals(1, response.todayOrders());
         assertEquals(BigDecimal.valueOf(300000), response.monthRevenue());

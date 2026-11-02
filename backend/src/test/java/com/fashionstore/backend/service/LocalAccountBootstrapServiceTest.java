@@ -86,7 +86,7 @@ class LocalAccountBootstrapServiceTest {
     @DisplayName("Should create default branch if no active branch exists in database")
     void shouldCreateDefaultBranchIfNoneExists() {
         when(branchRepository.findFirstByActiveTrueOrderByBranchIdAsc()).thenReturn(Optional.empty());
-        when(branchService.create(any(CreateBranchRequest.class)))
+        when(branchService.create(any(CreateBranchRequest.class), anyString()))
                 .thenReturn(new BranchResponse("CN001", "Local Demo Branch", null, null, true));
         when(accountRepository.findByUsername(anyString())).thenReturn(Optional.empty());
         when(employeeService.create(any(CreateEmployeeRequest.class)))
@@ -94,7 +94,7 @@ class LocalAccountBootstrapServiceTest {
 
         bootstrapService.ensureAccounts("123456");
 
-        verify(branchService, atLeastOnce()).create(any(CreateBranchRequest.class));
+        verify(branchService, atLeastOnce()).create(any(CreateBranchRequest.class), anyString());
         verify(accountRepository, atLeast(Role.values().length)).save(any(Account.class));
     }
 
