@@ -31,13 +31,13 @@ Central truy vấn các site để tổng hợp báo cáo. Mỗi site có Linked
 
 | Bảng | Vị trí và quy tắc | Trạng thái |
 | --- | --- | --- |
-| `SanPham` | Central quản lý danh mục gốc, nhân bản xuống 3 site qua `Pub_Common` | Schema + seed 100 SP; replication script có sẵn |
-| `ChiNhanh` | Danh mục dùng chung, thống nhất mã `CN1` / `CN2` / `CN3` / `CN0` | Đã thống nhất toàn hệ thống (FE, BE, DB) |
-| `KhachHang` | Dùng chung toàn cục; nhân bản 2 chiều qua `Pub_Common` (Merge Replication) kèm quy tắc Last-In-Wins | Bỏ UNIQUE SoDienThoai, có `LastModified`, tiền tố site `Q1-*`, `Q7-*`, `TD-*` |
+| `SanPham` | Central quản lý danh mục gốc, nhân bản xuống 3 site trong publication của từng chi nhánh (không lọc) | Schema + seed 100 SP; replication script có sẵn |
+| `ChiNhanh` | Danh mục dùng chung, thống nhất mã `CN1` / `CN2` / `CN3` / `CN0`. **Không publish** — mỗi site tự có 1 dòng | Đã thống nhất toàn hệ thống (FE, BE, DB) |
+| `KhachHang` | Dùng chung toàn cục; nhân bản 2 chiều trong publication của từng chi nhánh (không lọc) kèm quy tắc Last-In-Wins | Bỏ UNIQUE SoDienThoai, có `LastModified`, tiền tố site `Q1-*`, `Q7-*`, `TD-*` |
 | `NhanVien` | Phân mảnh ngang theo `MaChiNhanh`, nhân bản từ Central xuống site qua publication riêng | Đã cấu hình subset filter `MaChiNhanh` |
 | `TonKho` | Phân mảnh ngang theo `MaChiNhanh`, site ghi cục bộ, Merge Agent đồng bộ 2 chiều lên Central | Đã seed 300 dòng tồn kho cho cả 3 chi nhánh |
 | `HoaDon` | Phân mảnh ngang theo `MaChiNhanh`, site lập và đẩy đồng bộ lên Central | Tiền tố site `Q1-HD*`, `Q7-HD*`, `TD-HD*` |
-| `ChiTietHoaDon` | Phân mảnh dẫn xuất theo `HoaDon` (kế thừa phân mảnh chi nhánh) | Cấu hình qua Join Filter (`sp_addmergejoinfilter`) |
+| `ChiTietHoaDon` | Phân mảnh dẫn xuất theo `HoaDon` (kế thừa phân mảnh chi nhánh) | Cấu hình qua Join Filter (`sp_addmergefilter`) |
 | `TaiKhoan` | Phân mảnh dẫn xuất theo `NhanVien`, nhân bản xuống site (read-only) phục vụ đăng nhập local | Thuộc tính `NOT FOR REPLICATION` trên IDENTITY, Join Filter |
 
 ## Giao dịch bán hàng
@@ -55,8 +55,9 @@ Việc bán hàng **không phụ thuộc Central** — site hoàn toàn độc l
 ## Đồng bộ dữ liệu
 
 Đã chốt và cài đặt hoàn chỉnh **Mô hình B1 (Merge Replication)** trong `database/replication.sql`:
-- **1 Publication dùng chung (`Pub_Common`)**: Chứa `SanPham`, `ChiNhanh`, `KhachHang` không lọc, push tới cả 3 site.
-- **3 Publication theo chi nhánh (`Pub_Fashion_Store_Q1`, `Pub_Fashion_Store_Q7`, `Pub_Fashion_Store_ThuDuc`)**: Chứa `NhanVien`, `TonKho`, `HoaDon` (subset filter `MaChiNhanh`) kết hợp Join Filter cho `TaiKhoan` và `ChiTietHoaDon`.
+- **3 Publication theo chi nhánh (`Pub_Fashion_Store_Q1`, `Pub_Fashion_Store_Q7`, `Pub_Fashion_Store_ThuDuc`)**: mỗi publication chứa `SanPham`, `KhachHang` (không lọc) + `NhanVien`, `TonKho`, `HoaDon` (subset filter `MaChiNhanh`) + Join Filter cho `TaiKhoan` và `ChiTietHoaDon`.
+- **`ChiNhanh` không publish**: mỗi site tự tạo 1 dòng chi nhánh của mình.
+- **Điều kiện schema**: cả 8 bảng có cột `rowguid uniqueidentifier ROWGUIDCOL` (Merge bắt buộc).
 - **Cơ chế dự phòng / thủ công**: `central-procs.sql` và `sites/site-procs.sql` cung cấp stored procedure đồng bộ thủ công qua Linked Server khi cần ép đồng bộ tức thì ngoài chu kỳ của Merge Agent.
 
 ## Trách nhiệm từng file trong `database/`

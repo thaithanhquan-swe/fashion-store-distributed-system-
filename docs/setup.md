@@ -57,6 +57,9 @@ Toàn bộ code và script dùng `CN1` / `CN2` / `CN3`: `frontend/src/config/bra
 
 Đã chốt phương án **Merge Replication** ngày 2026-10-31 (theo tài liệu giảng dạy của TS. Phan Thị Hà - HVCNBCVT trong file `[6][4]TONG HOP TOM TAT CAI DAT CSDL PT - QUAN LY THUC THI GIAO DICH- SV.pdf`).
 
+**Chốt ngày 2026-11-03:** mô hình **B1** – site là nguồn ghi của bảng riêng, đồng bộ bằng
+**Merge publication có bộ lọc** (`MaChiNhanh` + join filter). Xem mục 6.5.2.
+
 **Lý do lựa chọn và ưu điểm:**
 1. **Khớp 100% mẫu giảng viên:** Tài liệu bài giảng hướng dẫn trực quan bằng SSMS Wizard tạo `Merge publication`, thiết lập bộ lọc ngang nguyên thủy (`CHINHANH WHERE [MACN] = 'CN1'`) và dẫn xuất (`Add Join to Extend the Selected Filter` cho `NHANVIEN`, `TONKHO`, `HOADON`, `CHITIETHOADON`).
 2. **Đồng bộ hai chiều / đa chiều cho `KhachHang`:** Bất kỳ chi nhánh nào tạo hoặc cập nhật thông tin khách hàng, dữ liệu đều tự động merge về Central và phát tán sang các chi nhánh khác mà không cần viết trigger thủ công.
@@ -71,7 +74,7 @@ Mỗi nhóm phải **chứng minh** tối thiểu: **1 phương pháp phân mả
 | # | Hạng mục bắt buộc | Đồ án dùng | Chứng minh ở đâu |
 | --- | --- | --- | --- |
 | 1 | **Phân mảnh** | Ngang **nguyên thủy** (`CHINHANH` lọc `MACN='CN1'`) + ngang **dẫn xuất** (join `NHANVIEN`, `TONKHO`, `HOADON`, `CHITIETHOADON`) | Mục 4.3, 6.4, 9.2 |
-| 2 | **Replication** | **Merge publication** `Pub_Fashion_Store_Q1/Q7/ThuDuc` + publication dùng chung | Mục 4.3, 5.4, 6 |
+| 2 | **Replication** | **Merge publication** `Pub_Fashion_Store_Q1/Q7/ThuDuc` (bộ lọc `MaChiNhanh` + join filter), push subscription | Mục 4.3, 5.4, 6, Phụ lục A |
 | 3 | **Distributed transaction** | `BEGIN DISTRIBUTED TRANSACTION` qua linked server (2PC/MSDTC) | **Mục 8.5** |
 | 4 | **Concurrency** | 2 phiên cùng sửa `TonKho` + conflict resolver của Merge | **Mục 8.6** |
 | 5 | **Distributed query** | Truy vấn 4 phần `UNION ALL` qua 3 linked server | Mục 9.4 |
@@ -87,9 +90,10 @@ Mỗi nhóm phải **chứng minh** tối thiểu: **1 phương pháp phân mả
 > **vẫn phải làm thêm mục 8.5** thì mới đủ "1 distributed transaction".
 
 > [!NOTE]
-> **Trạng thái code hiện tại:** `database/replication.sql` đang dựng **transactional** replication,
-> chưa phải Merge. Nếu giữ quyết định Merge thì phải sửa script theo Merge publication
-> (xem thêm mục 6.5 về chiều ghi của bảng riêng). Đừng trộn cả hai cho cùng một bảng.
+> **Trạng thái code (cập nhật 2026-11-03):** `database/replication.sql` đã được viết lại hoàn toàn
+> theo **Merge** (`sp_addmergepublication` + `sp_addmergearticle` + `sp_addmergefilter` +
+> `sp_addmergesubscription`). `database/common.sql` đã thêm cột `rowguid` cho cả 8 bảng vì Merge
+> bắt buộc. **Không trộn** Transactional và Merge cho cùng một bảng.
 
 ---
 
@@ -248,12 +252,32 @@ Kết quả cần có `TcpTestSucceeded : True`.
 
 Trên cả 4 máy:
 
-1. SSMS → chuột phải server (ví dụ `localhost\FASHION`) → **Properties** → **Security**.
-2. Chọn **SQL Server and Windows Authentication mode**.
-3. Khởi động lại SQL Server.
-4. `Security` → `Logins` → `sa` → **Properties**:
-   - `Status` → `Enabled`.
-   - Đặt mật khẩu mạnh, **không lưu vào git**.
+1. SSMS → chuột phải server (ví dụ `localhost\FASHION`) → **Properties** → trang **Security**.
+2. Chọn **SQL Server and Windows Authentication mode** → **OK**.
+3. Khởi động lại dịch vụ SQL Server (bắt buộc, đổi mode chỉ có hiệu lực sau khi restart):
+
+   ```powershell
+   Restart-Service 'MSSQL$FASHION'    # instance FASHION
+   # hoặc: Restart-Service MSSQLSERVER   # instance mặc định
+   ```
+
+4. **`Logins` KHÔNG nằm trong Server Properties.** Đường dẫn đúng là trong
+   **Object Explorer** (cây bên trái):
+
+   ```text
+   Databases
+   Security            ← chuột phải mục này
+     Logins            ← (không phải trang trong Server Properties)
+       sa              ← chuột phải → Properties
+   ```
+
+   - Tab **General**: đặt mật khẩu mạnh, **không lưu vào git**.
+   - Tab **Status**: `Permission to connect to database engine` = **Grant**,
+     `Login` = **Enabled** → **OK**.
+   - Nếu không thấy mục `Security`/`Logins`: bấm **View → Object Explorer Details**
+     hoặc refresh (F5) node server; đảm bảo đã connect bằng tài khoản Windows là
+     sysadmin (nhánh `DESKTOP-...\FASHION` → login Windows của bạn).
+
 5. Kiểm tra:
 
 ```sql
@@ -265,7 +289,8 @@ SELECT SERVERPROPERTY('IsIntegratedSecurityOnly') AS ChiWindows;
 
 ### 2.5. Bật SQL Server Agent
 
-Replication cần SQL Server Agent chạy để thực thi Snapshot Agent, Log Reader Agent, Merge Agent.
+Replication cần SQL Server Agent chạy để thực thi **Snapshot Agent** và **Merge Agent**
+(Merge không dùng Log Reader Agent — đó là của Transactional).
 
 1. **SQL Server Configuration Manager** → `SQL Server Services`.
 2. Tìm service Agent tương ứng với instance:
@@ -324,6 +349,18 @@ Test-Path "\\<IP_CENTRAL>\REPLDATA"
 Phải trả về `True`.
 
 ### 2.7. Tạo login `distributed_user` trên từng site
+
+> [!IMPORTANT]
+> **Mục này thường KHÔNG cần chạy tay.** `database/sites/Fashion_Store.sql` (và
+> `database/Fashion_Central.sql` trên Central) đã tự tạo login + user này ở mục 2 của script,
+> dùng `$(DistributedPassword)`.
+>
+> Nếu vẫn chạy tay ở đây, có 2 điều kiện:
+> 1. Phần `USE [Fashion_Store]` chỉ chạy được **sau khi DB đã tồn tại** (mục 3.3). Chưa có DB
+>    thì chạy riêng phần `master`, rồi quay lại chạy phần user sau.
+> 2. Mật khẩu phải **trùng** `DistributedPassword` trong `linked-servers.sql`,
+>    `sites/Fashion_Store.sql` và `replication.sql` — nếu lệch, Merge Agent sẽ
+>    `Login failed for user 'distributed_user'`.
 
 Trên **mỗi site** (Q1, Q7, Thủ Đức), chạy trong SSMS:
 
@@ -392,9 +429,23 @@ Tất cả phải `TcpTestSucceeded : True`.
 | 4 | `database/central-procs.sql` | Central | 4 procedure phân tán |
 | 5 | `database/sites/site-procs.sql` | 3 site | 3 procedure kéo/đẩy dữ liệu |
 | 6 | `database/seed.sql` | Central | Dữ liệu mẫu (100 SP, 300 dòng tồn kho cho CN1/CN2/CN3, 15 KH, 10 NV, 7 HĐ) |
-| 7 | `database/replication.sql` | Central | Distributor + publication + subscription |
+| 7 | `database/replication.sql` | Central | Distributor + 3 Merge publication + push subscription |
 
 `common.sql` được `:r` tự động bởi script 2 và 3, **không chạy riêng**.
+Từ 2026-11-03 `common.sql` tạo thêm cột **`rowguid uniqueidentifier ROWGUIDCOL`** cho cả 8 bảng
+(Merge bắt buộc). Nếu DB đã tạo trước ngày đó thì có 2 cách, làm trên **cả 4 máy**:
+
+- **Cách sạch (khuyến nghị khi còn dữ liệu mẫu):** chạy lại script 2/3 (chúng `DROP DATABASE` rồi
+  tạo lại) → `seed.sql` → rồi mới chạy script 7.
+- **Cách giữ dữ liệu:** `ALTER TABLE` thêm cột cho từng bảng, ví dụ:
+
+  ```sql
+  ALTER TABLE dbo.TonKho
+      ADD rowguid uniqueidentifier ROWGUIDCOL NOT NULL
+          CONSTRAINT DF_TonKho_rowguid DEFAULT NEWID();
+  ```
+
+  (`common.sql` dùng `CREATE TABLE` trần nên **không** chạy lại được trên DB đã tồn tại.)
 
 Mọi lệnh `sqlcmd` phải chạy **trong thư mục `database/`** vì `:r` phân giải
 đường dẫn theo thư mục hiện tại, và phải có `-f 65001` để không lỗi tiếng Việt.
@@ -467,12 +518,15 @@ sqlcmd -S localhost\FASHION -E -i seed.sql -b -f 65001
 Tài khoản demo (mật khẩu `123456`): `staff.q1`, `manager.q1`, `staff.q7`,
 `manager.q7`, `staff.td`, `manager.td`, `admin`.
 
-### 3.6. Điều kiện để replication hoạt động
+### 3.6. Điều kiện để replication (Merge) hoạt động
 
 - Schema 3 site phải **giống nhau** (cùng bảng, cùng cột, cùng kiểu).
 - Tên database đích phải **giống tên database nguồn** (quy tắc trong suốt).
+- Mỗi bảng article phải có **khóa chính** (Merge dùng PK để định danh dòng).
+- Mỗi bảng article phải có cột **`rowguid uniqueidentifier ROWGUIDCOL`** (đã có trong `common.sql`).
 - Không có khóa ngoại chặn snapshot (hoặc phải tạo theo đúng thứ tự).
-- `distributed_user` có quyền đọc/ghi trên database đích.
+- `distributed_user` có quyền đọc/ghi trên database đích **và là login của Merge Agent**
+  (để trigger `INSTEAD OF DELETE` bỏ qua bước kiểm tra).
 
 ### 3.7. Cấu hình backend trỏ database của từng máy
 
@@ -548,6 +602,18 @@ Làm bằng SSMS theo mẫu giảng viên:
 5. Distribution database: giữ mặc định `distribution`.
 6. Finish.
 
+> **Retention:** wizard đặt `max_distretention` mặc định **72 giờ**, trong khi merge publication
+> cần `@retention = 14` **ngày** (336 giờ). Nếu để 72 giờ, subscriber offline quá 3 ngày sẽ bị
+> đánh dấu hết hạn và phải reinitialize. `database/replication.sql` đặt sẵn **720 giờ** (30 ngày).
+> Nếu làm bằng wizard, tăng lại bằng:
+>
+> ```sql
+> EXEC sp_changedistributiondb
+>     @database = N'distribution',
+>     @property = N'max_distretention',
+>     @value    = 720;   -- giờ
+> ```
+
 > **Publisher là named instance `FASHION`.** `SERVERPROPERTY('ServerName')` trả về
 > `HOST\FASHION`; vì push subscription chạy agent **trên chính Central** nên kết nối
 > nội bộ vẫn OK, không cần SQL Browser. Nếu chuyển sang **pull subscription**, site phải
@@ -562,40 +628,45 @@ EXEC sp_helpdistributor;
 
 ### 4.3. Tạo Publication
 
-Với mô hình 3 chi nhánh, nên tạo:
+Với mô hình 3 chi nhánh, tạo **3 merge publication** (mỗi chi nhánh một cái):
+`Pub_Fashion_Store_Q1`, `Pub_Fashion_Store_Q7`, `Pub_Fashion_Store_ThuDuc`.
+Mỗi publication chứa **toàn bộ** article cần thiết, khác nhau chỉ ở điều kiện lọc:
 
-- **1 publication dùng chung**: `SanPham`, `ChiNhanh` (không filter).
-- **3 publication theo chi nhánh**: `Pub_Fashion_Store_Q1`, `Pub_Fashion_Store_Q7`,
-  `Pub_Fashion_Store_ThuDuc` (đúng tên script `database/replication.sql` tạo ra),
-  mỗi publication chứa các bảng riêng đã lọc theo `MaChiNhanh`.
+| Bảng | Article | Bộ lọc |
+| --- | --- | --- |
+| `SanPham` | bảng dùng chung | không lọc (`@partition_options = 0`) |
+| `KhachHang` | bảng dùng chung, ghi được ở mọi site | không lọc (`@partition_options = 0`) |
+| `NhanVien` | bảng riêng | `MaChiNhanh = 'CN1'` (`@partition_options = 2`) |
+| `TonKho` | bảng riêng | `MaChiNhanh = 'CN1'` |
+| `HoaDon` | bảng riêng | `MaChiNhanh = 'CN1'` |
+| `TaiKhoan` | dẫn xuất | join filter `TaiKhoan.MaNhanVien = NhanVien.MaNhanVien` |
+| `ChiTietHoaDon` | dẫn xuất | join filter `ChiTietHoaDon.MaHoaDon = HoaDon.MaHoaDon` |
+| `ChiNhanh` | **không publish** | mỗi site tự có 1 dòng do `sites/Fashion_Store.sql` tạo |
 
 > ✅ **Chốt B1 (Merge) – site tự ghi bảng riêng.** Các bảng `TonKho`, `HoaDon`, `ChiTietHoaDon`, `NhanVien`
-> được publish từ Central tới mỗi site với filter `MaChiNhanh`. Site ghi cục bộ; Merge Agent đẩy lên Central
-> và kéo thay đổi về. Central làm điểm tổng hợp, không phải nguồn ghi duy nhất.
-
-Các bảng riêng cần lọc:
-
-| Bảng | Điều kiện lọc |
-| --- | --- |
-| `NhanVien` | `MaChiNhanh = 'CN1'` |
-| `TonKho` | `MaChiNhanh = 'CN1'` |
-| `HoaDon` | `MaChiNhanh = 'CN1'` |
-| `ChiTietHoaDon` | Join dẫn xuất theo `HoaDon` |
+> vẫn được publish từ Central tới mỗi site với filter `MaChiNhanh`. Site ghi cục bộ; Merge Agent đẩy lên
+> Central và kéo thay đổi về. Central là điểm tổng hợp, không phải nguồn ghi duy nhất.
+>
+> ⚠️ **Điều kiện bắt buộc:** cả 8 bảng phải có cột `rowguid uniqueidentifier ROWGUIDCOL`
+> (đã thêm vào `database/common.sql`). Nếu máy nào tạo DB trước 2026-11-03, phải chạy lại
+> `common.sql` hoặc `ALTER TABLE ... ADD rowguid ...` trước khi tạo publication.
 
 Các bước wizard:
 
 1. Chuột phải **Local Publications** → **New Publication**.
 2. Chọn database `Fashion_Central` (hoặc tên đã chốt).
-3. Chọn **Merge publication** (đã chốt ở mục 0.4). Nếu chỉ cần một chiều Central → site
-   thì có thể chọn Transactional, nhưng **không trộn cả hai cho cùng một bảng**.
-4. Chọn articles:
-   - Bỏ chọn `sysdiagrams`.
-   - Chọn bảng cần replicate.
-5. Với bảng riêng: **Add Filter** → chọn cột `MaChiNhanh` → điều kiện `= 'CN1'`.
-6. Với `ChiTietHoaDon`: **Add Join to Extend the Selected Filter** → join `ChiTietHoaDon.MaHoaDon = HoaDon.MaHoaDon`.
-7. Đặt tên publication (`Pub_Fashion_Store_Q1`).
-8. Chọn **Create a snapshot immediately** và **Start the Snapshot Agent**.
-9. Finish.
+3. Chọn **Merge publication** (đã chốt ở mục 0.4 — không chọn Transactional).
+4. Chọn articles: `SanPham`, `KhachHang`, `NhanVien`, `TaiKhoan`, `TonKho`, `HoaDon`,
+   `ChiTietHoaDon`. **Bỏ** `ChiNhanh` và `sysdiagrams`.
+5. Với bảng riêng (`NhanVien`, `TonKho`, `HoaDon`): **Add Filter** → chọn cột `MaChiNhanh`
+   → điều kiện `= 'CN1'` → **OK**. Wizard sẽ hỏi *"Do you want to add a join filter?"*.
+6. Với `TaiKhoan`: **Add Join to Extend the Selected Filter** → chọn `NhanVien`
+   → `TaiKhoan.MaNhanVien = NhanVien.MaNhanVien`.
+7. Với `ChiTietHoaDon`: **Add Join to Extend the Selected Filter** → chọn `HoaDon`
+   → `ChiTietHoaDon.MaHoaDon = HoaDon.MaHoaDon`.
+8. Đặt tên publication (`Pub_Fashion_Store_Q1`).
+9. Chọn **Create a snapshot immediately** và **Start the Snapshot Agent**.
+10. Finish.
 
 Lặp lại cho `CN2`, `CN3` (đổi điều kiện filter và tên publication).
 
@@ -624,21 +695,50 @@ Chạy trên Central (mục 7.1).
 
 ---
 
-## 5. Máy 2, 3, 4 – Site
+## 5. Máy 2, 3, 4 – Site (ví dụ Q1)
 
-Làm lần lượt trên từng site.
+### 5.0. Thứ tự chạy trên một site
+
+Điều kiện trước: máy site đã xong **2.1–2.5** (SQL Server Developer, instance `FASHION` cổng
+`14333`, firewall, Mixed Auth + `sa`, SQL Server Agent chạy) và **2.8** (`Test-NetConnection`
+tới Central `:14333` = True). Không cần chạy script SQL nào trước bước 1.
+
+Mọi lệnh chạy trong thư mục `database/`:
+
+| Bước | Việc làm | Lệnh |
+| --- | --- | --- |
+| 1 | Sửa `linked-servers.sql`: `:setvar Role "site"`, `CentralHost` = `<IP_Central>,14333`, `DistributedPassword` | (editor) |
+| 2 | Tạo linked server `CENTRAL` | `sqlcmd -S localhost\FASHION -E -i linked-servers.sql -b -f 65001` |
+| 3 | Sửa `sites/Fashion_Store.sql`: chỉ mở khối **CN1**, kiểm tra `DistributedPassword` | (editor) |
+| 4 | Tạo DB + login `distributed_user` + 8 bảng + dòng `ChiNhanh` | `sqlcmd -S localhost\FASHION -E -i sites\Fashion_Store.sql -b -f 65001` |
+| 5 | (Chỉ sau khi Central đã có `Fashion_Central`) tạo 3 procedure | `sqlcmd -S localhost\FASHION -E -i sites\site-procs.sql -b -f 65001` |
+
+Kiểm tra sau bước 4:
+
+```sql
+SELECT name, data_source FROM sys.servers WHERE is_linked = 1;   -- CENTRAL
+USE [Fashion_Store];
+SELECT name FROM sys.tables ORDER BY name;                        -- đủ 8 bảng
+SELECT * FROM dbo.ChiNhanh;                                       -- đúng 1 dòng CN1
+SELECT name FROM sys.database_principals WHERE name = 'distributed_user';  -- có
+```
+
+> ⚠️ `sites/Fashion_Store.sql` **DROP DATABASE `Fashion_Store`** nếu đã tồn tại. Chỉ chạy lại
+> khi chấp nhận mất dữ liệu (hoặc dùng `ALTER TABLE` cho `rowguid`, xem 3.1).
 
 ### 5.1. Tạo database và schema
 
-Xem mục 3.2.
+Xem mục **3.3** (không phải 3.2 — 3.2 là script của Central).
 
 ### 5.2. Tạo `distributed_user`
 
-Xem mục 2.7.
+**Bước 4 ở trên đã tạo sẵn login + user này** (mục 2 của `sites/Fashion_Store.sql`), nên
+thường **không cần** chạy tay mục 2.7. Chỉ chạy 2.7 nếu bạn tạo DB bằng cách khác — và phải
+chạy **sau** khi DB `Fashion_Store` tồn tại, với mật khẩu trùng `DistributedPassword`.
 
 ### 5.3. Tạo Linked Server `CENTRAL`
 
-Chạy trên từng site (mục 7.2).
+Chạy trên từng site (mục 7.2) — chính là bước 2 ở trên.
 
 ### 5.4. Tạo Subscription
 
@@ -688,30 +788,35 @@ Trên Q7 / Thủ Đức tương tự với `CN2` / `CN3`.
 ```text
 Central (Publisher + Distributor)
    │
-   ├── Pub_Common            ──►  Q1, Q7, Thủ Đức   (SanPham, ChiNhanh)
-   ├── Pub_Fashion_Store_Q1  ──►  Q1                 (NhanVien, TonKho, HoaDon, ChiTietHoaDon lọc CN1)
-   ├── Pub_Fashion_Store_Q7  ──►  Q7                 (lọc CN2)
-   └── Pub_Fashion_Store_ThuDuc ──► Thủ Đức          (lọc CN3)
+   ├── Pub_Fashion_Store_Q1  ──►  Q1        SanPham, KhachHang (không lọc)
+   │                                        NhanVien, TonKho, HoaDon (lọc CN1)
+   │                                        TaiKhoan, ChiTietHoaDon (join filter)
+   ├── Pub_Fashion_Store_Q7  ──►  Q7        như trên, lọc CN2
+   └── Pub_Fashion_Store_ThuDuc ──► Thủ Đức như trên, lọc CN3
 ```
+
+> Không còn `Pub_Common`: mỗi publication đã chứa cả bảng dùng chung và bảng riêng.
+> `ChiNhanh` không publish vì mỗi site tự có 1 dòng (`sites/Fashion_Store.sql`).
 
 ### 6.2. Loại replication
 
 | Loại | Dùng cho | Ghi chú |
 | --- | --- | --- |
-| **Merge** ✅ đã chọn | Bảng cần đồng bộ hai chiều / bán offline (`KhachHang`, bảng riêng nếu chọn mô hình B) | Khớp mẫu giảng viên; cần resolver xung đột |
-| **Transactional** | Chỉ khi cần một chiều Central → site, dữ liệu ít sửa | **Không trộn** với Merge cho cùng một bảng |
-| **Trigger + queue** | Bổ sung khi cần đẩy thay đổi lên Central mà không dùng Merge | Linh hoạt, lưu được khi mất mạng |
+| **Merge** ✅ đã chọn | Toàn bộ article: bảng dùng chung + bảng riêng + bảng dẫn xuất | Khớp mẫu giảng viên; resolver xung đột theo priority |
+| **Transactional** | Không dùng trong đồ án | Chỉ một chiều, không hỗ trợ bán offline |
+| **Trigger + queue** | Không dùng (giữ làm ví dụ B2 ở mục 6.5.2) | Xem cảnh báo đầu mục 8 |
 
 ### 6.3. Lưu ý về `KhachHang`
 
-Nếu chỉ dùng transactional replication một chiều:
+`KhachHang` **không có** `MaChiNhanh` → không phân mảnh được, phải publish **không lọc** và
+đồng bộ **hai chiều** bằng Merge. Đây là bảng duy nhất mà nhiều site cùng ghi một dòng,
+nên là chỗ dùng conflict resolver:
 
-- Khách tạo tại Q7 **sẽ không tự lên Central**.
-- Central không thấy khách mới → báo cáo thiếu.
-- Q1/Thủ Đức không nhận được khách của Q7.
+- Priority: Subscriber `75.00` < Publisher `100.00`.
+- Cột `LastModified` để đối soát khi cần.
+- Xem thêm mục 8.6 demo 3.
 
-Vì vậy phải chọn một trong ba phương án ở mục 0.4.
-**Không được** cấu hình cả transactional replication và trigger cho cùng một luồng dữ liệu — sẽ gây trùng.
+**Không được** cấu hình cả Merge và trigger/outbox cho cùng một bảng — sẽ ghi trùng.
 
 ### 6.4. Thứ tự tạo article
 
@@ -786,7 +891,7 @@ Ba cơ chế này **không cùng một trục so sánh**. Cần tách thành 2 c
 
 **B2 – Trigger + outbox cục bộ (tùy chọn, chỉ làm ví dụ mở rộng — KHÔNG dùng cùng lúc với B1 cho cùng bảng):**
 
-- `Pub_Common` chỉ chứa bảng dùng chung: `SanPham`, `ChiNhanh`; `KhachHang` dùng Merge.
+- Chỉ publish bảng dùng chung (`SanPham`, `KhachHang` bằng Merge).
   **Không** tạo `Pub_Fashion_Store_Q1/Q7/ThuDuc` cho bảng riêng.
 - Trigger ghi vào **`SyncOutbox` cục bộ tại site**, job định kỳ đẩy lên Central (mục 8.1–8.3).
 - ⚠️ **Không** ghi trực tiếp `CENTRAL.[Fashion_Central]...` trong trigger: khi mất
@@ -904,7 +1009,14 @@ SELECT TOP 5 * FROM CENTRAL.[Fashion_Central].dbo.KhachHang;
 
 ## 8. Trigger và đồng bộ dữ liệu
 
-> Phần này chỉ làm sau khi chốt phương án ở mục 0.4.
+> [!WARNING]
+> **Đã chốt B1 (Merge) — KHÔNG chạy mục 8.1–8.3 trên các bảng đang được Merge publish.**
+> `TonKho`, `HoaDon`, `ChiTietHoaDon`, `NhanVien`, `TaiKhoan`, `KhachHang`, `SanPham` đã được
+> Merge Agent đồng bộ hai chiều. Nếu thêm trigger outbox cho cùng bảng, mỗi thay đổi sẽ được
+> ghi **hai lần** (một lần bởi Merge, một lần bởi job) → dữ liệu trùng hoặc ghi đè.
+>
+> Mục 8.1–8.3 giữ lại làm **phương án B2 / ví dụ mở rộng** (khi nào không dùng Merge cho một
+> bảng cụ thể). Mục **8.4** (trigger kiểm soát xóa) vẫn dùng được bình thường.
 
 ### 8.1. Bảng outbox cục bộ tại mỗi site
 
@@ -1264,35 +1376,71 @@ Cơ chế phân xử: priority Subscriber 75.00 < Publisher 100.00, kèm cột `
 | 6 | Snapshot folder | `Test-Path \\<IP_CENTRAL>\REPLDATA` | `True` |
 | 7 | `distributed_user` | `SELECT name FROM sys.database_principals WHERE name='distributed_user'` | Có 1 dòng |
 | 8 | Linked Server | `EXEC sp_testlinkedserver N'...'` | Không lỗi |
-| 9 | Publication | `EXEC sp_helppublication` | Có publication |
-| 10 | Subscription | Replication Monitor | Status = Running/Succeeded |
+| 9 | Merge publication | `EXEC sp_helpmergepublication N'Pub_Fashion_Store_Q1'` | Có publication, `allow_push = 1` |
+| 10 | Merge subscription | Replication Monitor → **Merge Agents** | Status = Running/Succeeded |
 | 11 | Distributed transaction | `EXEC dbo.sp_ChuyenKho_PhanTan ...` + test ROLLBACK (mục 8.5.3) | Hai site cùng đổi hoặc cùng không đổi |
 | 12 | Concurrency | 2 cửa sổ SSMS sửa cùng dòng `TonKho` (mục 8.6) | Thấy `blocking_session_id`, không mất update |
+| 13 | `rowguid` | `SELECT COL_LENGTH('dbo.TonKho','rowguid')` | `16` (uniqueidentifier) |
+| 14 | Đồng bộ 2 chiều | Bán hàng ở Q1 → chờ Merge Agent → kiểm tra `HoaDon` trên Central | Central có hóa đơn mới |
 
 ### 9.2. Kiểm tra phân mảnh
 
 Trên Q1:
 
 ```sql
-SELECT DISTINCT MaChiNhanh FROM dbo.TonKho;
--- Chỉ CN1
-SELECT DISTINCT MaChiNhanh FROM dbo.HoaDon;
--- Chỉ CN1
+-- Mỗi bảng phải chỉ có 1 giá trị MaChiNhanh = 'CN1'
+SELECT 'TonKho'       AS Bang, MaChiNhanh, COUNT(*) AS SoDong FROM dbo.TonKho       GROUP BY MaChiNhanh
+UNION ALL
+SELECT 'HoaDon',              MaChiNhanh, COUNT(*)           FROM dbo.HoaDon       GROUP BY MaChiNhanh
+UNION ALL
+SELECT 'NhanVien',            MaChiNhanh, COUNT(*)           FROM dbo.NhanVien     GROUP BY MaChiNhanh;
+
+-- Không được có dòng của chi nhánh khác
+SELECT COUNT(*) AS SaiChiNhanh FROM dbo.TonKho WHERE MaChiNhanh <> 'CN1';
+-- Kỳ vọng: 0
 ```
 
 Trên Q7: chỉ `CN2`. Trên Thủ Đức: chỉ `CN3`.
+
+**Chứng minh phân mảnh dẫn xuất** — `ChiTietHoaDon` không có cột `MaChiNhanh`, nên kiểm tra qua join:
+
+```sql
+SELECT COUNT(*) AS DongSaiChiNhanh
+FROM dbo.ChiTietHoaDon ct
+JOIN dbo.HoaDon h ON h.MaHoaDon = ct.MaHoaDon
+WHERE h.MaChiNhanh <> 'CN1';
+-- Kỳ vọng: 0  (join filter đã giới hạn theo HoaDon)
+```
+
+**Chứng minh trên Central** — Central phải có đủ cả 3 chi nhánh (đây là điểm khác với site):
+
+```sql
+SELECT MaChiNhanh, COUNT(*) AS SoDong FROM dbo.TonKho GROUP BY MaChiNhanh ORDER BY MaChiNhanh;
+-- Kỳ vọng: CN1, CN2, CN3 đều có dòng
+```
 
 ### 9.3. Kiểm tra bán hàng và tồn kho
 
 Kịch bản mẫu:
 
-1. Trên Q7, kiểm tra `SP001` tồn = 10.
+1. Trên Q7, ghi lại `SoLuongTon` của `SP001`.
 2. Bán 2 `SP001`.
-3. Kiểm tra:
+3. Kiểm tra **tại Q7**:
    - Có đúng 1 `HoaDon` mới.
    - Có 2 dòng `ChiTietHoaDon`.
-   - `TonKho` còn 8.
-   - Q1 và Thủ Đức không đổi.
+   - `TonKho` giảm đúng 2.
+4. **Chứng minh Merge đẩy ngược lên Central:** chờ Merge Agent (mặc định 5 phút) hoặc
+   chuột phải subscription → **Start Synchronizing**. Sau đó trên Central:
+
+   ```sql
+   SELECT TOP 5 * FROM dbo.HoaDon ORDER BY NgayLap DESC;
+   SELECT SoLuongTon FROM dbo.TonKho WHERE MaChiNhanh = 'CN2' AND MaSanPham = 'SP001';
+   ```
+
+   Kỳ vọng: hóa đơn vừa bán ở Q7 **xuất hiện trên Central**, tồn `CN2` khớp Q7.
+5. **Chứng minh chiều Central → site:** sửa `GiaBan` của `SP001` trên Central, chờ Merge Agent,
+   kiểm tra `SanPham` tại Q1/Q7/Thủ Đức đã đổi giá.
+6. **Chứng minh cách ly phân mảnh:** Q1 và Thủ Đức **không** thấy `HoaDon` vừa bán ở Q7.
 
 ### 9.4. Kiểm tra truy vấn phân tán
 
@@ -1309,10 +1457,14 @@ SELECT 'TD', * FROM SITE_THUDUC.[Fashion_Store].dbo.TonKho;
 ### 9.5. Kiểm tra mất Central
 
 1. Tắt SQL Server hoặc ngắt mạng máy Central.
-2. Trên Q7, bán hàng bình thường.
-3. Kiểm tra tồn Q7 giảm, hóa đơn được tạo.
+2. Trên Q7, bán hàng bình thường (đây là điểm mạnh của **B1 + Merge**).
+3. Kiểm tra tồn Q7 giảm, hóa đơn được tạo **cục bộ**.
 4. Bật lại Central.
-5. Kiểm tra dữ liệu được đồng bộ (theo cơ chế đã chọn).
+5. Chờ Merge Agent chạy (hoặc **Start Synchronizing** thủ công) → hóa đơn và tồn kho của Q7
+   xuất hiện trên Central. Xem **Replication Monitor → Merge Agents** để biết đã đồng bộ xong.
+
+> Nếu bước 2 **không** bán được thì nguyên nhân thường là: site đang chạy mô hình A (Central là
+> nguồn ghi), hoặc trigger đang ghi trực tiếp qua linked server `CENTRAL` (mục 8.2 bản cũ).
 
 ---
 
@@ -1333,6 +1485,12 @@ SELECT 'TD', * FROM SITE_THUDUC.[Fashion_Store].dbo.TonKho;
 | `Cannot drop server ... because it is used` | Linked server đang được dùng | Xóa subscription/publication trước |
 | `Replication schema mismatch` | Schema 3 site không giống nhau | So sánh bảng/cột, sửa schema |
 | `Conflict` khi đồng bộ khách hàng | Hai site sửa cùng bản ghi | Áp dụng quy tắc `LastModified` / resolver |
+| `Invalid column name 'rowguid'` | DB tạo trước 2026-11-03 (chưa có `rowguid`) | Chạy lại `Fashion_Central.sql` / `sites/Fashion_Store.sql`, hoặc `ALTER TABLE ... ADD rowguid uniqueidentifier ROWGUIDCOL NOT NULL DEFAULT NEWID()` trên **cả 4 máy** (mục 3.1) |
+| `Cannot add article ... because it does not have a primary key` | Bảng thiếu PK | Merge bắt buộc PK trên mọi article; kiểm tra `common.sql` |
+| `Cannot create the publication ... @independent_agent` | Dùng tham số của Transactional cho `sp_addmergepublication` | Bỏ `@independent_agent` / `@history_retention`; dùng `@type = N'table'` và `sp_addmergefilter` (Phụ lục A) |
+| Merge Agent báo lỗi khi áp snapshot vào site | Bảng đích chưa tồn tại hoặc thiếu `rowguid` (`@pre_creation_cmd = N'none'`) | Chạy `sites/Fashion_Store.sql` **trước** khi tạo subscription |
+| Merge không xóa được dòng trên site (`trg_*_NoDelete`) | Trigger `INSTEAD OF DELETE` chặn, và Merge Agent không đăng nhập bằng `distributed_user` | Đặt `@subscriber_login = N'distributed_user'` (script đã làm), hoặc bỏ trigger guard nếu vẫn lỗi |
+| Xung đột lặp lại trên `TonKho` | Hai site cùng ghi một dòng (dữ liệu không còn đúng phân mảnh) | Kiểm tra filter `MaChiNhanh`; xem `Replication Monitor → Conflicts` |
 | Backend báo `Cannot open database` | `application.properties` trỏ sai DB hoặc file không tồn tại | Làm mục 3.4: copy `application-local.properties` → `application.properties` rồi sửa `spring.datasource.url`, hoặc bật profile `local` + `SPRING_DATASOURCE_URL` |
 | Backend start nhưng báo thiếu datasource / `Failed to configure a DataSource` | Không có `application.properties` và không bật profile `local` | Làm mục 3.4 |
 | Frontend báo CORS | Backend chưa cho phép origin | Đặt `app.cors.allowed-origins=http://localhost:5173` |
@@ -1357,15 +1515,23 @@ Thứ tự an toàn:
 Lệnh tham khảo:
 
 ```sql
--- Xóa subscription
-EXEC sp_dropsubscription
-    @publication = N'Pub_Fashion_Store_Q1',
-    @subscriber = N'<SUBSCRIBER_SERVER>',
-    @destination_db = N'Fashion_Store';
+USE [Fashion_Central];
+GO
 
--- Xóa publication
+-- Merge dùng sp_dropmergesubscription (KHÔNG phải sp_dropsubscription)
+EXEC sp_dropmergesubscription
+    @publication       = N'Pub_Fashion_Store_Q1',
+    @subscriber        = N'<SUBSCRIBER_SERVER>,14333',
+    @subscriber_db     = N'Fashion_Store',
+    @subscription_type = N'push';
+
 EXEC sp_droppublication @publication = N'Pub_Fashion_Store_Q1';
+GO
 ```
+
+> Muốn xóa **cả 3** publication thì lặp lại cho `Pub_Fashion_Store_Q7` và
+> `Pub_Fashion_Store_ThuDuc`. Chạy lại `database/replication.sql` cũng tự dọn
+> publication/subscription cũ trước khi tạo mới.
 
 > Không xóa `distribution` database khi chưa chắc chắn; có thể ảnh hưởng các publication khác.
 
@@ -1381,8 +1547,12 @@ EXEC sp_droppublication @publication = N'Pub_Fashion_Store_Q1';
 - [ ] Snapshot folder `\\CENTRAL\REPLDATA` đã share
 - [ ] Database `Fashion_Central` đã tạo
 - [ ] `distributed_user` đã tạo
-- [ ] Configure Distribution xong
-- [ ] Publication `Pub_Fashion_Store_Q1`, `Pub_Fashion_Store_Q7`, `Pub_Fashion_Store_ThuDuc`
+- [ ] Configure Distribution xong (`max_distretention` ≥ 336 giờ)
+- [ ] `common.sql` có cột `rowguid` trên cả 8 bảng (mục 4.3)
+- [ ] Bật `merge publish` cho `Fashion_Central`
+- [ ] Merge publication `Pub_Fashion_Store_Q1`, `Pub_Fashion_Store_Q7`, `Pub_Fashion_Store_ThuDuc`
+- [ ] Mỗi publication có đủ 7 article + 2 join filter (`TaiKhoan`, `ChiTietHoaDon`)
+- [ ] Push subscription + Merge Agent job cho cả 3 site
 - [ ] Linked Server `SITE_Q1`, `SITE_Q7`, `SITE_THUDUC` (`@datasrc` có `,14333`)
 - [ ] `sp_testlinkedserver` OK
 - [ ] Snapshot Agent chạy thành công
@@ -1394,131 +1564,126 @@ EXEC sp_droppublication @publication = N'Pub_Fashion_Store_Q1';
 
 - [ ] SQL Server Developer/Standard, instance `FASHION`, TCP/IP `14333`, firewall
 - [ ] Mixed auth
-- [ ] Database `Fashion_Store` + 8 bảng
+- [ ] Database `Fashion_Store` + 8 bảng (có cột `rowguid`)
 - [ ] `distributed_user` + quyền đọc/ghi
 - [ ] Linked Server `CENTRAL` (`@datasrc` có `,14333`)
 - [ ] Subscription `Pub_Fashion_Store_Q1`
 - [ ] Dữ liệu chỉ có `CN1`
 - [ ] Bán hàng thử và kiểm tra tồn
+- [ ] Merge Agent chạy: bán ở site → thấy `HoaDon` trên Central (mục 9.3 bước 4)
 
 ### Máy 3 – Q7
 
 - [ ] SQL Server Developer/Standard, instance `FASHION`, TCP/IP `14333`, firewall
 - [ ] Mixed auth
-- [ ] Database `Fashion_Store` + 8 bảng
+- [ ] Database `Fashion_Store` + 8 bảng (có cột `rowguid`)
 - [ ] `distributed_user` + quyền đọc/ghi
 - [ ] Linked Server `CENTRAL` (`@datasrc` có `,14333`)
 - [ ] Subscription `Pub_Fashion_Store_Q7`
 - [ ] Dữ liệu chỉ có `CN2`
 - [ ] Bán hàng thử và kiểm tra tồn
+- [ ] Merge Agent chạy: bán ở site → thấy `HoaDon` trên Central (mục 9.3 bước 4)
 
 ### Máy 4 – Thủ Đức
 
 - [ ] SQL Server Developer/Standard, instance `FASHION`, TCP/IP `14333`, firewall
 - [ ] Mixed auth
-- [ ] Database `Fashion_Store` + 8 bảng
+- [ ] Database `Fashion_Store` + 8 bảng (có cột `rowguid`)
 - [ ] `distributed_user` + quyền đọc/ghi
 - [ ] Linked Server `CENTRAL` (`@datasrc` có `,14333`)
 - [ ] Subscription `Pub_Fashion_Store_ThuDuc`
 - [ ] Dữ liệu chỉ có `CN3`
 - [ ] Bán hàng thử và kiểm tra tồn
+- [ ] Merge Agent chạy: bán ở site → thấy `HoaDon` trên Central (mục 9.3 bước 4)
 
 ---
 
 ## Phụ lục A – Script T-SQL tham khảo cho Publication
 
 > Chỉ dùng khi đã hiểu rõ; wizard an toàn hơn cho lần đầu.
-> Script dưới đây là khung **MERGE** (đã chốt mục 0.4). Xem chi tiết đầy đủ trong `database/replication.sql`.
+> Script đầy đủ (cả 3 publication + subscription + verify) nằm trong `database/replication.sql`.
+> Đoạn dưới chỉ minh hoạ **thứ tự đúng** của lệnh Merge cho một publication.
 
 ```sql
 USE [Fashion_Central];
 GO
 
--- Bật merge publishing cho database
+-- (1) Bật merge publishing — tên option là 'merge publish', KHÔNG phải 'publish'
 EXEC sp_replicationdboption
-    @dbname = N'Fashion_Central',
-    @optname = N'merge publish',
-    @value = N'true';
+    @dbname = N'Fashion_Central', @optname = N'merge publish', @value = N'true';
 GO
 
--- Tạo merge publication cho Q1 (CN1)
+-- (2) Publication
+--     Merge publication KHÔNG có @repl_freq / @status (luôn continuous + active).
 EXEC sp_addmergepublication
-    @publication = N'Pub_Fashion_Store_Q1',
-    @description = N'Replication to Quận 1 (CN1), filtered by MaChiNhanh',
-    @status = N'active',
-    @allow_push = N'true',
-    @allow_pull = N'true',
-    @repl_freq = N'continuous',
-    @independent_agent = N'true',
-    @retention = 14,
-    @history_retention = 48;
+    @publication   = N'Pub_Fashion_Store_Q1',
+    @description   = N'Merge publication for CN1',
+    @allow_push    = N'true',
+    @allow_pull    = N'false',
+    @retention     = 14,                 -- ngày
+    @conflict_logging = N'publisher';
 GO
 
--- Thêm article đã lọc: NhanVien (chỉ CN1)
+-- (3) Article KHÔNG lọc (bảng dùng chung)
 EXEC sp_addmergearticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'NhanVien',
-    @source_object = N'NhanVien',
-    @type = N'logbased',
-    @schema_option = 0x000000000803509F,
+    @publication = N'Pub_Fashion_Store_Q1', @article = N'SanPham',
+    @source_object = N'SanPham', @type = N'table',
+    @pre_creation_cmd = N'none', @partition_options = 0;
+GO
+
+-- (4) Article lọc ngang nguyên thủy
+EXEC sp_addmergearticle
+    @publication = N'Pub_Fashion_Store_Q1', @article = N'TonKho',
+    @source_object = N'TonKho', @type = N'table',
     @pre_creation_cmd = N'none',
-    @subset_filterclause = N'MaChiNhanh = ''CN1''';
+    @subset_filterclause = N'MaChiNhanh = ''CN1''',
+    @partition_options = 2;              -- mỗi subscription một partition riêng
 GO
 
--- Thêm article đã lọc: TonKho (chỉ CN1)
+-- (5) Article dẫn xuất: tạo article trước, rồi mới thêm join filter
 EXEC sp_addmergearticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'TonKho',
-    @source_object = N'TonKho',
-    @type = N'logbased',
-    @schema_option = 0x000000000803509F,
-    @pre_creation_cmd = N'none',
-    @subset_filterclause = N'MaChiNhanh = ''CN1''';
+    @publication = N'Pub_Fashion_Store_Q1', @article = N'ChiTietHoaDon',
+    @source_object = N'ChiTietHoaDon', @type = N'table',
+    @pre_creation_cmd = N'none', @partition_options = 2;
 GO
 
--- Thêm article đã lọc: HoaDon (chỉ CN1)
-EXEC sp_addmergearticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'HoaDon',
-    @source_object = N'HoaDon',
-    @type = N'logbased',
-    @schema_option = 0x000000000803509F,
-    @pre_creation_cmd = N'none',
-    @subset_filterclause = N'MaChiNhanh = ''CN1''';
+EXEC sp_addmergefilter                    -- KHÔNG phải sp_addmergejoinfilter
+    @publication       = N'Pub_Fashion_Store_Q1',
+    @article           = N'ChiTietHoaDon',
+    @filtername        = N'flt_ChiTietHoaDon_HoaDon',
+    @join_articlename  = N'HoaDon',
+    @join_filterclause = N'[ChiTietHoaDon].[MaHoaDon] = [HoaDon].[MaHoaDon]',
+    @join_unique_key   = 1,
+    @filter_type       = 1;               -- 1 = join filter
 GO
 
--- Thêm article dẫn xuất: ChiTietHoaDon (join filter qua HoaDon)
-EXEC sp_addmergearticle
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'ChiTietHoaDon',
-    @source_object = N'ChiTietHoaDon',
-    @type = N'logbased',
-    @schema_option = 0x000000000803509F,
-    @pre_creation_cmd = N'none';
-GO
+-- (6) Snapshot agent + push subscription
+EXEC sp_addpublication_snapshot @publication = N'Pub_Fashion_Store_Q1';
 
--- Join filter: ChiTietHoaDon -> HoaDon
-EXEC sp_addmergejoinfilter
-    @publication = N'Pub_Fashion_Store_Q1',
-    @article = N'ChiTietHoaDon',
-    @join_article = N'HoaDon',
-    @join_filterclause = N'ChiTietHoaDon.[MaHoaDon] = HoaDon.[MaHoaDon]',
-    @join_unique_key = 1,
-    @type = 1;
-GO
-
--- Tạo snapshot agent
-EXEC sp_addpublication_snapshot
-    @publication = N'Pub_Fashion_Store_Q1',
-    @frequency_type = 4,   -- daily
-    @frequency_interval = 1,
-    @frequency_subday = 8, -- hours
-    @frequency_subday_interval = 1;
+EXEC sp_addmergesubscription
+    @publication            = N'Pub_Fashion_Store_Q1',
+    @subscriber             = N'<IP_Q1>,14333',
+    @subscriber_db          = N'Fashion_Store',
+    @subscription_type      = N'push',
+    @subscriber_type        = N'global',   -- để đặt được priority xung đột
+    @sync_type              = N'automatic',
+    @subscription_priority  = 75.00;       -- Publisher = 100.00
 GO
 ```
 
-> Script trên chỉ là khung. Cần kiểm tra `@schema_option`, thứ tự article và join filter theo đúng schema thật.
-> Với `ChiTietHoaDon`, phải dùng **join filter** trỏ tới `HoaDon`, không chỉ `@filter_clause`.
+> **Các lỗi hay gặp khi tự viết T-SQL cho Merge:**
+> - Dùng `@type = N'logbased'` (của Transactional) → Merge chỉ nhận `@type = N'table'`.
+> - Dùng `@repl_freq` / `@status` trong `sp_addmergepublication`
+>   → hai tham số này **không tồn tại** (merge luôn continuous + active).
+> - Dùng `@independent_agent` / `@history_retention` trong `sp_addmergepublication`
+>   → cũng **không tồn tại** (đó là tham số của Transactional).
+> - Dùng `@priority` cho `sp_addmergesubscription` → tên đúng là **`@subscription_priority`**,
+>   và chỉ đặt được khi `@subscriber_type = N'global'` (local subscription luôn priority `0.0`).
+> - Truyền `@subscriber_type = 0` → với Merge phải là chuỗi `N'local'` hoặc `N'global'`.
+> - Gọi `sp_addmergejoinfilter` → proc đúng là **`sp_addmergefilter`** (kèm `@filtername`).
+> - Quên `rowguid` trên bảng article → snapshot/apply lỗi.
+> - `@pre_creation_cmd = N'none'` yêu cầu bảng đích **đã tồn tại và đúng schema**
+>   (chạy `sites/Fashion_Store.sql` trước khi tạo subscription).
 
 ---
 

@@ -167,10 +167,12 @@ GO
 /*
 -- STEP 1: Configure Distributor (run once on Central) — xem replication.sql
 -- STEP 2: Create Publications — xem replication.sql (sp_addmergepublication)
---   Pub_Common: SanPham, ChiNhanh, KhachHang (không lọc, push tat ca site)
---   Pub_Fashion_Store_Q1/Q7/ThuDuc: NhanVien, TaiKhoan, TonKho, HoaDon,
---     ChiTietHoaDon (loc MaChiNhanh, join filter ChiTietHoaDon -> HoaDon,
---     TaiKhoan -> NhanVien)
+--   Pub_Fashion_Store_Q1/Q7/ThuDuc: mỗi publication chứa
+--     SanPham, KhachHang          (không lọc)
+--     NhanVien, TonKho, HoaDon    (loc MaChiNhanh)
+--     TaiKhoan                    (join filter TaiKhoan -> NhanVien)
+--     ChiTietHoaDon               (join filter ChiTietHoaDon -> HoaDon)
+--   ChiNhanh KHONG publish (moi site tu co 1 dong)
 -- STEP 3: Create Subscriptions — xem replication.sql (sp_addmergesubscription +
 --   sp_addmergepushsubscription_agent)
 -- STEP 4: Start snapshot agents — xem replication.sql (sp_startpublication_snapshot)

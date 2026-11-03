@@ -593,7 +593,7 @@ database/seed.sql          Dữ liệu mẫu theo kịch bản demo
 database/linked-servers.sql Script sp_addlinkedserver (Central + 3 site, cổng 14333)
 database/central-procs.sql Procedure phân tán tên 4 phần
 database/sites/site-procs.sql Procedure kéo/đẩy dữ liệu tại site
-database/replication.sql   Distributor + publication + push subscription
+database/replication.sql   Distributor + 3 Merge publications + push subscriptions
 ```
 
 ---
@@ -1055,7 +1055,7 @@ sites/Fashion_Store.sql    -> Fashion_Store    (+ distributed_user, trigger) tr�
 linked-servers.sql         -> SITE_Q1 / SITE_Q7 / SITE_THUDUC / CENTRAL
 central-procs.sql          -> procedure phân tán (tên 4 phần)
 sites/site-procs.sql       -> procedure kéo/đẩy dữ liệu tại site
-replication.sql            -> Distributor + publication + push subscription
+replication.sql            -> Distributor + 3 Merge publications + push subscriptions
 seed.sql                   -> dữ liệu mẫu
 ```
 

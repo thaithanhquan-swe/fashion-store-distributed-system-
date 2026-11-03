@@ -17,7 +17,7 @@ Phạm vi hiện tại của nhóm: **làm trước phần database, backend, fr
 >   2. database/Fashion_Central.sql: DB Central, 4 chi nhánh, distributed_user, trigger guard (cho phép distributed_user), aggregation views.
 >   3. database/sites/Fashion_Store.sql: DB Site thống nhất Fashion_Store, trigger 	rg_HoaDon_ValidateBranch, trigger guard.
 >   4. database/linked-servers.sql: Linked server 4 chiều (SITE_Q1, SITE_Q7, SITE_THUDUC, CENTRAL) trên cổng 14333.
->   5. database/replication.sql: Cấu hình Distributor, bật Merge publishing, tạo 4 Merge publications (Pub_Common không lọc + 3 publication riêng lọc theo MaChiNhanh), join filters cho TaiKhoan và ChiTietHoaDon, push subscriptions và snapshots.
+>   5. database/replication.sql: Cấu hình Distributor, bật Merge publishing, tạo 3 Merge publications theo chi nhánh (bảng chung không lọc + bảng riêng lọc theo MaChiNhanh), join filters cho TaiKhoan và ChiTietHoaDon, push subscriptions và snapshots. Yêu cầu cột `rowguid` trên cả 8 bảng.
 >   6. database/central-procs.sql: SP phân tán tại Central (Last-In-Wins, dynamic SQL whitelist, SP đồng bộ thủ công).
 >   7. database/sites/site-procs.sql: SP phân tán tại Site (kéo KH, kéo NV/TK chi nhánh, đẩy HĐ).
 >   8. database/seed.sql: 100 sản phẩm, 300 dòng tồn kho cho 3 chi nhánh, 15 khách hàng (tiền tố site), 10 nhân viên & tài khoản BCrypt.

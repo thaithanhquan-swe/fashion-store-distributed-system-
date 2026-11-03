@@ -6,6 +6,14 @@
 
 -- -------------------------------------------------
 -- 1. CORE TABLES (8 tables, identical schema everywhere)
+--
+--    MERGE REPLICATION REQUIREMENT
+--    Every published table must have a column of type uniqueidentifier with the
+--    ROWGUIDCOL property. Merge uses it (plus the MSmerge_* metadata columns it
+--    adds) to track row identity across Publisher and Subscribers.
+--    We declare it explicitly here so Publisher (Central) and Subscriber (site)
+--    schemas match exactly; otherwise the snapshot cannot apply with
+--    @pre_creation_cmd = N'none'.
 -- -------------------------------------------------
 
 -- ChiNhanh: Branch master. Central has 4 rows (CN1, CN2, CN3, CN0). Site has 1 row (its own).
@@ -15,6 +23,7 @@ CREATE TABLE [dbo].[ChiNhanh] (
     [DiaChi] [nvarchar](255) NULL,
     [SoDienThoai] [varchar](15) NULL,
     [TrangThai] [bit] NOT NULL DEFAULT 1,
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_ChiNhanh] PRIMARY KEY CLUSTERED ([MaChiNhanh] ASC)
 ) ON [PRIMARY];
 GO
@@ -30,6 +39,7 @@ CREATE TABLE [dbo].[SanPham] (
     [GiaBan] [decimal](18, 2) NOT NULL DEFAULT 0 CHECK ([GiaBan] >= 0),
     [TrangThai] [bit] NOT NULL DEFAULT 1,
     [LastModified] [datetime2](3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_SanPham] PRIMARY KEY CLUSTERED ([MaSanPham] ASC)
 ) ON [PRIMARY];
 GO
@@ -49,6 +59,7 @@ CREATE TABLE [dbo].[KhachHang] (
     [NgayDangKy] [date] NOT NULL DEFAULT CAST(GETDATE() AS date),
     [TrangThai] [bit] NOT NULL DEFAULT 1,
     [LastModified] [datetime2](3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_KhachHang] PRIMARY KEY CLUSTERED ([MaKhachHang] ASC)
 ) ON [PRIMARY];
 GO
@@ -68,6 +79,7 @@ CREATE TABLE [dbo].[NhanVien] (
     [ChucVu] [nvarchar](50) NULL,
     [TrangThai] [bit] NOT NULL DEFAULT 1,
     [LastModified] [datetime2](3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_NhanVien] PRIMARY KEY CLUSTERED ([MaNhanVien] ASC)
 ) ON [PRIMARY];
 GO
@@ -81,6 +93,7 @@ CREATE TABLE [dbo].[TaiKhoan] (
     [MatKhau] [varchar](255) NOT NULL,
     [VaiTro] [varchar](20) NOT NULL CHECK ([VaiTro] IN ('STAFF', 'MANAGER', 'ADMIN')),
     [TrangThai] [bit] NOT NULL DEFAULT 1,
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_TaiKhoan] PRIMARY KEY CLUSTERED ([MaTaiKhoan] ASC),
     CONSTRAINT [UQ_TaiKhoan_TenDangNhap] UNIQUE NONCLUSTERED ([TenDangNhap] ASC),
     CONSTRAINT [UQ_TaiKhoan_MaNhanVien] UNIQUE NONCLUSTERED ([MaNhanVien] ASC)
@@ -98,6 +111,7 @@ CREATE TABLE [dbo].[HoaDon] (
     [PhuongThucTT] [varchar](30) NULL,
     [TrangThai] [varchar](20) NOT NULL DEFAULT N'DA_THANH_TOAN',
     [LastModified] [datetime2](3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_HoaDon] PRIMARY KEY CLUSTERED ([MaHoaDon] ASC)
 ) ON [PRIMARY];
 GO
@@ -110,6 +124,7 @@ CREATE TABLE [dbo].[ChiTietHoaDon] (
     [DonGia] [decimal](18, 2) NOT NULL,
     [GiamGia] [decimal](18, 2) NOT NULL DEFAULT 0,
     [ThanhTien] [decimal](18, 2) NOT NULL,
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_ChiTietHoaDon] PRIMARY KEY CLUSTERED ([MaHoaDon] ASC, [MaSanPham] ASC)
 ) ON [PRIMARY];
 GO
@@ -123,6 +138,7 @@ CREATE TABLE [dbo].[TonKho] (
     [MucTonToiThieu] [int] NOT NULL DEFAULT 5,
     [NgayCapNhat] [datetime] NOT NULL DEFAULT GETDATE(),
     [LastModified] [datetime2](3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    [rowguid] [uniqueidentifier] ROWGUIDCOL NOT NULL DEFAULT NEWID(),
     CONSTRAINT [PK_TonKho] PRIMARY KEY CLUSTERED ([MaChiNhanh] ASC, [MaSanPham] ASC)
 ) ON [PRIMARY];
 GO

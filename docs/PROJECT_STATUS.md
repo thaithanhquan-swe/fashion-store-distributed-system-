@@ -3,7 +3,7 @@
 > **Đây là file nguồn sự thật duy nhất (single source of truth) của dự án.**
 > Mọi phiên làm việc mới — dù là người hay AI — phải đọc file này trước khi code.
 >
-> - Cập nhật lần cuối: **2026-11-01** (Hoàn thiện 100% bộ script SQL phân tán & fix toàn bộ bug) (sau khi pull tới `e2b0e3f`)
+> - Cập nhật lần cuối: **2026-11-03** (Chốt B1 + Merge: thêm `rowguid` vào `common.sql`, viết lại `replication.sql` sang Merge, sửa Phụ lục A của `docs/setup.md`)
 > - Commit đối chiếu: **`e2b0e3f`** (nhánh `develop`, đồng bộ `origin/develop`)
 > - Working tree lúc cập nhật: `M README.md`, `M docs/setup.md`, `M docs/gap-analysis.md`, `M docs/architecture.md`, `M backend/README.md`, `M backend/HUONG_DAN_CHAY_BACKEND.md`, `M backend/AGENTS.md`, `M frontend/README.md`, `?? docs/PROJECT_STATUS.md`, `?? docs/setup.docx` (chưa commit — theo quy ước của nhóm)
 > - Phạm vi: database, backend, frontend, phân tán, tài liệu, demo
@@ -467,7 +467,7 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 | --- | --- | --- | --- |
 | X01 | SQL Server Agent chạy, snapshot folder | 🟡 | Đã có hướng dẫn chi tiết trong `setup.md`; cần khởi chạy khi dựng 4 máy |
 | X02 | Configure Distribution | ✅ | Đã viết lệnh trong `database/replication.sql` (`sp_adddistributor`, `sp_adddistributiondb`) |
-| X03 | Publication | ✅ | Đã viết lệnh trong `database/replication.sql` (4 Merge publications: `Pub_Common` & 3 pub chi nhánh) |
+| X03 | Publication | ✅ | Đã viết lệnh trong `database/replication.sql` (3 Merge publications theo chi nhánh, mỗi pub đủ 7 article + 2 join filter) |
 | X04 | Add Filter + Add Join | ✅ | Đã cấu hình subset filter `MaChiNhanh` và join filter `ChiTietHoaDon` → `HoaDon`, `TaiKhoan` → `NhanVien` |
 | X05 | Subscription 3 site | ✅ | Đã cấu hình push subscriptions tới cả 3 site `$(Q1Subscriber)`, `$(Q7Subscriber)`, `$(TDSubscriber)` |
 | X06 | Linked Server 4 chiều | ✅ | Đã viết hoàn chỉnh trong `database/linked-servers.sql` (cố định port 14333) |
@@ -537,8 +537,8 @@ Kiểm tra tồn kho chi nhánh (TonKho WHERE MaChiNhanh = site)
 
 - [x] **P2-01** Quy trình bật SQL Server Agent, tạo snapshot folder `\\CENTRAL\REPLDATA` (hướng dẫn chi tiết trong `setup.md`).
 - [x] **P2-02** Viết lệnh Configure Distribution trên Central trong `replication.sql`.
-- [x] **P2-03** Viết lệnh tạo Publication: `Pub_Common` không filter; 3 publication riêng filter `MaChiNhanh` trong `replication.sql`.
-- [x] **P2-04** Cấu hình Join dẫn xuất qua `sp_addmergejoinfilter`: `ChiTietHoaDon` → `HoaDon`, `TaiKhoan` → `NhanVien`.
+- [x] **P2-03** Viết lệnh tạo Publication: 3 merge publication theo chi nhánh (`Pub_Fashion_Store_Q1/Q7/ThuDuc`), mỗi pub chứa bảng chung không lọc + bảng riêng filter `MaChiNhanh` + join filter, trong `replication.sql`.
+- [x] **P2-04** Cấu hình Join dẫn xuất qua `sp_addmergefilter`: `ChiTietHoaDon` → `HoaDon`, `TaiKhoan` → `NhanVien`.
 - [x] **P2-05** Viết lệnh tạo Push Subscription cho cả 3 site, database đích cùng tên `Fashion_Store`.
 - [x] **P2-06** Viết lệnh tạo Linked Server 4 chiều + `sp_addlinkedsrvlogin` trong `linked-servers.sql`.
 - [x] **P2-07** Viết views tổng hợp toàn hệ thống: `v_TonKho_ToanBo` gom dữ liệu Central và site.
@@ -721,7 +721,9 @@ git fetch origin
 | 2026-10-30 | `TaiKhoan` replicate read-only xuống site, lọc theo `NhanVien` | Cho phép đăng nhập offline tại site |
 | 2026-10-31 | Replication dùng **Merge** (theo mẫu giảng viên), lọc ngang `MACN` + join filter | Khớp PDF bài giảng; hỗ trợ đồng bộ 2 chiều `KhachHang` và bán offline |
 | 2026-11-01 | **Merge Replication không thay thế Distributed Transaction.** Đề tài yêu cầu tối thiểu: 1 phân mảnh + 1 replication + 1 distributed transaction + 1 concurrency + 1 distributed query | Merge là đồng bộ bất đồng bộ, không atomic; phải demo thêm 2PC/MSDTC (`docs/setup.md` 8.5) và concurrency (8.6) |
-| 2026-11-01 | **Chốt mô hình B1 (Merge cho cả bảng riêng & bảng chung).** Đã hoàn thiện script `database/replication.sql` và hướng dẫn wizard trong `docs/setup.md`. | Phân mảnh ngang nguyên thủy `ChiNhanh` (lọc `MaChiNhanh = 'CNx'`) + dẫn xuất qua `sp_addmergefilter` cho `NhanVien`, `TaiKhoan`, `TonKho`, `HoaDon`, `ChiTietHoaDon`. Giải quyết trọn vẹn Q5, Q6, Q8. B2 (trigger/outbox) chỉ giữ làm ví dụ tham khảo. |
+| 2026-11-01 | **Chốt mô hình B1 (Merge cho cả bảng riêng & bảng chung).** Đã hoàn thiện script `database/replication.sql` và hướng dẫn wizard trong `docs/setup.md`. | Phân mảnh ngang nguyên thủy cho `ChiNhanh`, `NhanVien`, `TonKho`, `HoaDon` (lọc `MaChiNhanh = 'CNx'`) + dẫn xuất bằng join filter cho `TaiKhoan` (qua `NhanVien`) và `ChiTietHoaDon` (qua `HoaDon`). Giải quyết trọn vẹn Q5, Q6, Q8. B2 (trigger/outbox) chỉ giữ làm ví dụ tham khảo. |
+| 2026-11-03 | **Thêm cột `rowguid uniqueidentifier ROWGUIDCOL` cho cả 8 bảng trong `database/common.sql`** | Merge Replication bắt buộc cột này để theo dõi định danh dòng giữa Publisher/Subscriber. Khai báo tường minh để schema Central và site khớp nhau, nhờ đó dùng được `@pre_creation_cmd = N'none'`. Nếu không có, snapshot/apply sẽ lỗi. |
+| 2026-11-03 | **`database/replication.sql` viết lại hoàn toàn sang Merge** (`sp_addmergepublication` + `sp_addmergearticle` + `sp_addmergefilter` + `sp_addmergesubscription`) | Trước đó script vẫn dựng Transactional, mâu thuẫn với quyết định 2026-10-31. Sửa luôn các lỗi cú pháp trong Phụ lục A của `docs/setup.md` (`@type='logbased'`, `sp_addmergejoinfilter`, `@independent_agent`). |
 
 ### 10.2. Đề xuất, **chưa chốt** (cần nhóm quyết)
 
