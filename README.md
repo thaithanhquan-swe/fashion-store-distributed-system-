@@ -698,21 +698,21 @@ Ví dụ:
 
 | Máy   | Vai trò | Radmin IP      |
 | ----- | ------- | -------------- |
-| Máy 1 | Central | `<IP_CENTRAL>` |
-| Máy 2 | Q1      | `<IP_Q1>`      |
-| Máy 3 | Q7      | `<IP_Q7>`      |
+| Máy 1 | Central | `26.13.244.22` |
+| Máy 2 | Q1      | `26.186.136.11` |
+| Máy 3 | Q7      | `26.10.141.36` |
 | Máy 4 | Thủ Đức | `<IP_THUDUC>`  |
 
-Ví dụ:
+Ví dụ (Radmin VPN):
 
 ```text
-Central   → 26.xx.xx.10
-Q1        → 26.xx.xx.11
-Q7        → 26.xx.xx.12
-Thủ Đức   → 26.xx.xx.13
+Central   → 26.13.244.22
+Q1        → 26.186.136.11
+Q7        → 26.10.141.36
+Thủ Đức   → <IP_THUDUC>
 ```
 
-IP thực tế sẽ được cập nhật sau.
+Kết nối qua mạng dùng dạng `<IP>,14333` (named instance `FASHION`, cổng cố định 14333).
 
 ---
 

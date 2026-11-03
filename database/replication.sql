@@ -19,7 +19,7 @@
 --   * The snapshot folder is shared and reachable by the Merge Agent, e.g.
 --         New-Item -ItemType Directory -Path D:\ReplData -Force
 --         New-SmbShare -Name REPLDATA -Path D:\ReplData -FullAccess Everyone
---     then set SnapshotShare below to \\<CENTRAL-PC>\REPLDATA
+--     then set SnapshotShare below to \\26.13.244.22\REPLDATA
 --   * distributed_user exists on Central and on every site (created by the
 --     database scripts) with db_datareader + db_datawriter.
 --     The site triggers (trg_*_NoDelete, trg_HoaDon_ValidateBranch) bypass
@@ -39,10 +39,10 @@ GO
 -- All machines run the named instance FASHION on fixed port 14333, so the
 -- subscriber names must include the port: "<IP>,14333".
 -- (Using "<IP>\FASHION" instead requires SQL Server Browser + UDP 1434.)
-:setvar SnapshotShare      "\\CENTRAL-PC\REPLDATA"
-:setvar Q1Subscriber       "192.168.1.11,14333"
-:setvar Q7Subscriber       "192.168.1.12,14333"
-:setvar TDSubscriber       "192.168.1.13,14333"
+:setvar SnapshotShare      "\\26.13.244.22\REPLDATA"
+:setvar Q1Subscriber       "26.186.136.11,14333"
+:setvar Q7Subscriber       "26.10.141.36,14333"
+:setvar TDSubscriber       "<IP_THUDUC>,14333"
 :setvar SubscriberPassword  "Fashion@123456"
 
 -- -------------------------------------------------

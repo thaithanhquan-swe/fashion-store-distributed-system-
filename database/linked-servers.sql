@@ -23,10 +23,10 @@ GO
 -- This project uses the named instance FASHION on fixed port 14333, so append
 -- ",14333" (no SQL Server Browser / UDP 1434 needed).
 -- Using "<IP>\FASHION" also works but requires SQL Server Browser + UDP 1434.
-:setvar CentralHost "192.168.1.10,14333"
-:setvar Q1Host      "192.168.1.11,14333"
-:setvar Q7Host      "192.168.1.12,14333"
-:setvar TDHost      "192.168.1.13,14333"
+:setvar CentralHost "26.13.244.22,14333"
+:setvar Q1Host      "26.186.136.11,14333"
+:setvar Q7Host      "26.10.141.36,14333"
+:setvar TDHost      "<IP_THUDUC>,14333"
 
 -- Must match the password used when the login was created (site/Central scripts)
 :setvar DistributedPassword "Fashion@123456"

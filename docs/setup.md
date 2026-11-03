@@ -24,11 +24,11 @@ Hướng dẫn này triển khai:
 
 ### 0.1. Bảng máy và thông tin cần điền
 
-| Máy | Vai trò | Database | Mã CN | IP (điền) | Backend |
+| Máy | Vai trò | Database | Mã CN | IP (Radmin VPN) | Backend |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Central | `Fashion_Central` | — | `<IP_CENTRAL>` | Cổng 8080 |
-| 2 | Store A – Quận 1 | `Fashion_Store` | `CN1` | `<IP_Q1>` | Cổng 8080 |
-| 3 | Store B – Quận 7 | `Fashion_Store` | `CN2` | `<IP_Q7>` | Cổng 8080 |
+| 1 | Central | `Fashion_Central` | — | `26.13.244.22` | Cổng 8080 |
+| 2 | Store A – Quận 1 | `Fashion_Store` | `CN1` | `26.186.136.11` | Cổng 8080 |
+| 3 | Store B – Quận 7 | `Fashion_Store` | `CN2` | `26.10.141.36` | Cổng 8080 |
 | 4 | Store C – Thủ Đức | `Fashion_Store` | `CN3` | `<IP_THUDUC>` | Cổng 8080 |
 
 > **Instance SQL Server dùng chung cho cả 4 máy:** named instance **`FASHION`**, cổng TCP
@@ -243,7 +243,7 @@ Get-Service 'SQLBrowser' | Select-Object Name, Status, StartType
 Kiểm tra từ máy khác:
 
 ```powershell
-Test-NetConnection <IP_CENTRAL> -Port 14333
+Test-NetConnection 26.13.244.22 -Port 14333
 ```
 
 Kết quả cần có `TcpTestSucceeded : True`.
@@ -343,7 +343,7 @@ New-SmbShare -Name "REPLDATA" -Path "D:\ReplData" -FullAccess "Everyone"
 3. Kiểm tra từ máy site:
 
 ```powershell
-Test-Path "\\<IP_CENTRAL>\REPLDATA"
+Test-Path "\\26.13.244.22\REPLDATA"
 ```
 
 Phải trả về `True`.
@@ -397,15 +397,15 @@ Lặp lại cho Q7 và Thủ Đức. Trên Central cũng nên tạo login này n
 Từ Central:
 
 ```powershell
-Test-NetConnection <IP_Q1> -Port 14333
-Test-NetConnection <IP_Q7> -Port 14333
+Test-NetConnection 26.186.136.11 -Port 14333
+Test-NetConnection 26.10.141.36 -Port 14333
 Test-NetConnection <IP_THUDUC> -Port 14333
 ```
 
 Từ từng site:
 
 ```powershell
-Test-NetConnection <IP_CENTRAL> -Port 14333
+Test-NetConnection 26.13.244.22 -Port 14333
 ```
 
 Tất cả phải `TcpTestSucceeded : True`.
@@ -617,7 +617,7 @@ Làm bằng SSMS theo mẫu giảng viên:
 > **Publisher là named instance `FASHION`.** `SERVERPROPERTY('ServerName')` trả về
 > `HOST\FASHION`; vì push subscription chạy agent **trên chính Central** nên kết nối
 > nội bộ vẫn OK, không cần SQL Browser. Nếu chuyển sang **pull subscription**, site phải
-> kết nối ngược lại Publisher → cần `<IP_CENTRAL>,14333` hoặc Browser + UDP 1434.
+> kết nối ngược lại Publisher → cần `26.13.244.22,14333` hoặc Browser + UDP 1434.
 
 Kiểm tra:
 
@@ -746,16 +746,16 @@ Trên Central:
 
 1. `Replication` → `Local Publications` → chuột phải `Pub_Fashion_Store_Q1` → **New Subscriptions**.
 2. Chọn **Push subscription** (hoặc Pull nếu muốn site tự kéo).
-3. **Add SQL Server Subscriber** → nhập `<IP_Q1>,14333` (hoặc `<IP_Q1>\FASHION` nếu đã bật Browser), user `distributed_user`.
+3. **Add SQL Server Subscriber** → nhập `26.186.136.11,14333` (hoặc `26.186.136.11\FASHION` nếu đã bật Browser), user `distributed_user`.
 4. Chọn database đích: `Fashion_Store` (phải trùng tên database nguồn).
 5. Chọn **Run the snapshot agent immediately**.
 6. Finish.
 
-Lặp lại cho `Pub_Fashion_Store_Q7` → Q7, `Pub_Fashion_Store_ThuDuc` → Thủ Đức.
+Lặp lại cho `Pub_Fashion_Store_Q7` → `26.10.141.36,14333`, `Pub_Fashion_Store_ThuDuc` → `<IP_THUDUC>,14333`.
 
-> **Bắt buộc với named instance:** tên Subscriber phải kèm cổng — `<IP_Q1>,14333`
-> (không phải `<IP_Q1>` trơn). Nếu SSMS/Wizard không cho nhập cổng, thêm subscriber
-> trong `Replication → Subscribers` với server name `<IP_Q1>,14333` trước, rồi mới
+> **Bắt buộc với named instance:** tên Subscriber phải kèm cổng — `26.186.136.11,14333`
+> (không phải `26.186.136.11` trơn). Nếu SSMS/Wizard không cho nhập cổng, thêm subscriber
+> trong `Replication → Subscribers` với server name `26.186.136.11,14333` trước, rồi mới
 > tạo subscription. Script `database/replication.sql` đã cấu hình sẵn dạng này.
 
 Kiểm tra trên Central:
@@ -940,7 +940,7 @@ EXEC sp_addlinkedserver
     @server     = N'SITE_Q1',
     @srvproduct = N'',
     @provider   = N'MSOLEDBSQL',
-    @datasrc    = N'<IP_Q1>,14333',
+    @datasrc    = N'26.186.136.11,14333',
     @provstr    = N'Encrypt=Optional;TrustServerCertificate=Yes';
 GO
 EXEC sp_addlinkedsrvlogin
@@ -951,8 +951,43 @@ EXEC sp_addlinkedsrvlogin
     @rmtpassword = N'<DISTRIBUTED_PASSWORD>';
 GO
 
--- Lặp lại cho SITE_Q7, SITE_THUDUC
-```
+-- Q7
+IF EXISTS (SELECT 1 FROM sys.servers WHERE name = N'SITE_Q7')
+    EXEC sp_dropserver @server = N'SITE_Q7', @droplogins = 'droplogins';
+GO
+EXEC sp_addlinkedserver
+    @server     = N'SITE_Q7',
+    @srvproduct = N'',
+    @provider   = N'MSOLEDBSQL',
+    @datasrc    = N'26.10.141.36,14333',
+    @provstr    = N'Encrypt=Optional;TrustServerCertificate=Yes';
+GO
+EXEC sp_addlinkedsrvlogin
+    @rmtsrvname  = N'SITE_Q7',
+    @useself     = N'False',
+    @locallogin  = NULL,
+    @rmtuser     = N'distributed_user',
+    @rmtpassword = N'<DISTRIBUTED_PASSWORD>';
+GO
+
+-- Thủ Đức
+IF EXISTS (SELECT 1 FROM sys.servers WHERE name = N'SITE_THUDUC')
+    EXEC sp_dropserver @server = N'SITE_THUDUC', @droplogins = 'droplogins';
+GO
+EXEC sp_addlinkedserver
+    @server     = N'SITE_THUDUC',
+    @srvproduct = N'',
+    @provider   = N'MSOLEDBSQL',
+    @datasrc    = N'<IP_THUDUC>,14333',
+    @provstr    = N'Encrypt=Optional;TrustServerCertificate=Yes';
+GO
+EXEC sp_addlinkedsrvlogin
+    @rmtsrvname  = N'SITE_THUDUC',
+    @useself     = N'False',
+    @locallogin  = NULL,
+    @rmtuser     = N'distributed_user',
+    @rmtpassword = N'<DISTRIBUTED_PASSWORD>';
+GO
 
 ### 7.2. Trên từng site → Central
 
@@ -969,7 +1004,7 @@ EXEC sp_addlinkedserver
     @server     = N'CENTRAL',
     @srvproduct = N'',
     @provider   = N'MSOLEDBSQL',
-    @datasrc    = N'<IP_CENTRAL>,14333',
+    @datasrc    = N'26.13.244.22,14333',
     @provstr    = N'Encrypt=Optional;TrustServerCertificate=Yes';
 GO
 EXEC sp_addlinkedsrvlogin
@@ -1373,7 +1408,7 @@ Cơ chế phân xử: priority Subscriber 75.00 < Publisher 100.00, kèm cột `
 | 3 | Mixed auth | `SELECT SERVERPROPERTY('IsIntegratedSecurityOnly')` | `0` |
 | 4 | Agent chạy | `EXEC xp_servicecontrol N'QUERYSTATE', N'SQLAgent$FASHION'` | `Running` |
 | 5 | Port 14333 | `Test-NetConnection <IP> -Port 14333` | `True` |
-| 6 | Snapshot folder | `Test-Path \\<IP_CENTRAL>\REPLDATA` | `True` |
+| 6 | Snapshot folder | `Test-Path \\26.13.244.22\REPLDATA` | `True` |
 | 7 | `distributed_user` | `SELECT name FROM sys.database_principals WHERE name='distributed_user'` | Có 1 dòng |
 | 8 | Linked Server | `EXEC sp_testlinkedserver N'...'` | Không lỗi |
 | 9 | Merge publication | `EXEC sp_helpmergepublication N'Pub_Fashion_Store_Q1'` | Có publication, `allow_push = 1` |
