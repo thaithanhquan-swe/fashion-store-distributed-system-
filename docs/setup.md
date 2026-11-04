@@ -29,7 +29,7 @@ Hướng dẫn này triển khai:
 | 1 | Central | `Fashion_Central` | — | `26.13.244.22` | Cổng 8080 |
 | 2 | Store A – Quận 1 | `Fashion_Store` | `CN1` | `26.186.136.11` | Cổng 8080 |
 | 3 | Store B – Quận 7 | `Fashion_Store` | `CN2` | `26.10.141.36` | Cổng 8080 |
-| 4 | Store C – Thủ Đức | `Fashion_Store` | `CN3` | `<IP_THUDUC>` | Cổng 8080 |
+| 4 | Store C – Thủ Đức | `Fashion_Store` | `CN3` | `26.132.58.176` | Cổng 8080 |
 
 > **Instance SQL Server dùng chung cho cả 4 máy:** named instance **`FASHION`**, cổng TCP
 > cố định **`14333`**. Kết nối nội bộ: `localhost\FASHION` (hoặc `localhost,14333`).
@@ -340,13 +340,36 @@ New-SmbShare -Name "REPLDATA" -Path "D:\ReplData" -FullAccess "Everyone"
 > Trong đồ án có thể dùng `Everyone` cho dễ demo. Nếu làm thật, chỉ cấp quyền cho account chạy SQL Server Agent và account của Distributor.
 > Đường dẫn snapshot sẽ là `\\CENTRAL\REPLDATA` (thay `CENTRAL` bằng tên máy thật).
 
-3. Kiểm tra từ máy site:
+3. Kiểm tra **trên máy Central** (bắt buộc):
 
 ```powershell
+Test-Path "\\localhost\REPLDATA"
 Test-Path "\\26.13.244.22\REPLDATA"
 ```
 
-Phải trả về `True`.
+Cả hai phải trả về `True`. Đây là phép kiểm tra quan trọng nhất: đồ án dùng
+**push subscription**, nên Snapshot Agent và Merge Agent đều chạy trên Central và đọc
+snapshot từ share này.
+
+4. Kiểm tra chéo **từ máy site** (khuyến nghị — không bắt buộc với push):
+
+```powershell
+net use \\26.13.244.22\REPLDATA
+Test-Path "\\26.13.244.22\REPLDATA"
+```
+
+`net use` phải báo `The command completed successfully.` và `Test-Path` trả `True`.
+
+> **Khi `Test-Path` trả `False`:** nó nuốt mọi loại lỗi (share không tồn tại, firewall chặn
+> cổng 445, sai quyền), nên đừng đoán — chạy `net use \\26.13.244.22\REPLDATA` hoặc
+> `net view \\26.13.244.22` để đọc mã lỗi thật (`System error 53` = không tới được 445,
+> `67` = không có share, `5` = sai quyền). Với Radmin VPN, nguyên nhân hay gặp là adapter
+> bị xếp vào profile **Public** nên rule "File and Printer Sharing (SMB-In)" không áp dụng:
+>
+> ```powershell
+> Set-NetConnectionProfile -InterfaceAlias "Radmin VPN" -NetworkCategory Private
+> Enable-NetFirewallRule -DisplayGroup "File and Printer Sharing"
+> ```
 
 ### 2.7. Tạo login `distributed_user` trên từng site
 
@@ -399,7 +422,7 @@ Từ Central:
 ```powershell
 Test-NetConnection 26.186.136.11 -Port 14333
 Test-NetConnection 26.10.141.36 -Port 14333
-Test-NetConnection <IP_THUDUC> -Port 14333
+Test-NetConnection 26.132.58.176 -Port 14333
 ```
 
 Từ từng site:
@@ -751,7 +774,7 @@ Trên Central:
 5. Chọn **Run the snapshot agent immediately**.
 6. Finish.
 
-Lặp lại cho `Pub_Fashion_Store_Q7` → `26.10.141.36,14333`, `Pub_Fashion_Store_ThuDuc` → `<IP_THUDUC>,14333`.
+Lặp lại cho `Pub_Fashion_Store_Q7` → `26.10.141.36,14333`, `Pub_Fashion_Store_ThuDuc` → `26.132.58.176,14333`.
 
 > **Bắt buộc với named instance:** tên Subscriber phải kèm cổng — `26.186.136.11,14333`
 > (không phải `26.186.136.11` trơn). Nếu SSMS/Wizard không cho nhập cổng, thêm subscriber
@@ -978,7 +1001,7 @@ EXEC sp_addlinkedserver
     @server     = N'SITE_THUDUC',
     @srvproduct = N'',
     @provider   = N'MSOLEDBSQL',
-    @datasrc    = N'<IP_THUDUC>,14333',
+    @datasrc    = N'26.132.58.176,14333',
     @provstr    = N'Encrypt=Optional;TrustServerCertificate=Yes';
 GO
 EXEC sp_addlinkedsrvlogin
@@ -1408,7 +1431,7 @@ Cơ chế phân xử: priority Subscriber 75.00 < Publisher 100.00, kèm cột `
 | 3 | Mixed auth | `SELECT SERVERPROPERTY('IsIntegratedSecurityOnly')` | `0` |
 | 4 | Agent chạy | `EXEC xp_servicecontrol N'QUERYSTATE', N'SQLAgent$FASHION'` | `Running` |
 | 5 | Port 14333 | `Test-NetConnection <IP> -Port 14333` | `True` |
-| 6 | Snapshot folder | `Test-Path \\26.13.244.22\REPLDATA` | `True` |
+| 6 | Snapshot folder (trên Central) | `Test-Path \\26.13.244.22\REPLDATA` | `True` |
 | 7 | `distributed_user` | `SELECT name FROM sys.database_principals WHERE name='distributed_user'` | Có 1 dòng |
 | 8 | Linked Server | `EXEC sp_testlinkedserver N'...'` | Không lỗi |
 | 9 | Merge publication | `EXEC sp_helpmergepublication N'Pub_Fashion_Store_Q1'` | Có publication, `allow_push = 1` |

@@ -696,12 +696,12 @@ Cả 4 máy phải tham gia cùng một mạng Radmin VPN.
 
 Ví dụ:
 
-| Máy   | Vai trò | Radmin IP      |
-| ----- | ------- | -------------- |
-| Máy 1 | Central | `26.13.244.22` |
+| Máy   | Vai trò | Radmin IP       |
+| ----- | ------- | --------------- |
+| Máy 1 | Central | `26.13.244.22`  |
 | Máy 2 | Q1      | `26.186.136.11` |
-| Máy 3 | Q7      | `26.10.141.36` |
-| Máy 4 | Thủ Đức | `<IP_THUDUC>`  |
+| Máy 3 | Q7      | `26.10.141.36`  |
+| Máy 4 | Thủ Đức | `26.132.58.176` |
 
 Ví dụ (Radmin VPN):
 
@@ -709,7 +709,7 @@ Ví dụ (Radmin VPN):
 Central   → 26.13.244.22
 Q1        → 26.186.136.11
 Q7        → 26.10.141.36
-Thủ Đức   → <IP_THUDUC>
+Thủ Đức   → 26.132.58.176
 ```
 
 Kết nối qua mạng dùng dạng `<IP>,14333` (named instance `FASHION`, cổng cố định 14333).
