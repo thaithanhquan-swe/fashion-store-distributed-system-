@@ -29,7 +29,7 @@ Hướng dẫn này triển khai:
 | 1 | Central | `Fashion_Central` | — | `26.13.244.22` | Cổng 8080 |
 | 2 | Store A – Quận 1 | `Fashion_Store` | `CN1` | `26.186.136.11` | Cổng 8080 |
 | 3 | Store B – Quận 7 | `Fashion_Store` | `CN2` | `26.10.141.36` | Cổng 8080 |
-| 4 | Store C – Thủ Đức | `Fashion_Store` | `CN3` | `26.132.58.176` | Cổng 8080 |
+| 4 | Store C – Thủ Đức | `Fashion_Store` | `CN3` | `26.143.138.168` | Cổng 8080 |
 
 > **Instance SQL Server dùng chung cho cả 4 máy:** named instance **`FASHION`**, cổng TCP
 > cố định **`14333`**. Kết nối nội bộ: `localhost\FASHION` (hoặc `localhost,14333`).
@@ -422,7 +422,7 @@ Từ Central:
 ```powershell
 Test-NetConnection 26.186.136.11 -Port 14333
 Test-NetConnection 26.10.141.36 -Port 14333
-Test-NetConnection 26.132.58.176 -Port 14333
+Test-NetConnection 26.143.138.168 -Port 14333
 ```
 
 Từ từng site:
@@ -774,7 +774,7 @@ Trên Central:
 5. Chọn **Run the snapshot agent immediately**.
 6. Finish.
 
-Lặp lại cho `Pub_Fashion_Store_Q7` → `26.10.141.36,14333`, `Pub_Fashion_Store_ThuDuc` → `26.132.58.176,14333`.
+Lặp lại cho `Pub_Fashion_Store_Q7` → `26.10.141.36,14333`, `Pub_Fashion_Store_ThuDuc` → `26.143.138.168,14333`.
 
 > **Bắt buộc với named instance:** tên Subscriber phải kèm cổng — `26.186.136.11,14333`
 > (không phải `26.186.136.11` trơn). Nếu SSMS/Wizard không cho nhập cổng, thêm subscriber
@@ -1001,7 +1001,7 @@ EXEC sp_addlinkedserver
     @server     = N'SITE_THUDUC',
     @srvproduct = N'',
     @provider   = N'MSOLEDBSQL',
-    @datasrc    = N'26.132.58.176,14333',
+    @datasrc    = N'26.143.138.168,14333',
     @provstr    = N'Encrypt=Optional;TrustServerCertificate=Yes';
 GO
 EXEC sp_addlinkedsrvlogin

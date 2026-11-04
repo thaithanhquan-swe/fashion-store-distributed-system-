@@ -42,7 +42,7 @@ GO
 :setvar SnapshotShare      "\\26.13.244.22\REPLDATA"
 :setvar Q1Subscriber       "26.186.136.11,14333"
 :setvar Q7Subscriber       "26.10.141.36,14333"
-:setvar TDSubscriber       "26.132.58.176,14333"
+:setvar TDSubscriber       "26.143.138.168,14333"
 :setvar SubscriberPassword  "Fashion@123456"
 
 -- -------------------------------------------------
