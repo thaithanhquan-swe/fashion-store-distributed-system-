@@ -26,7 +26,7 @@ GO
 :setvar CentralHost "26.13.244.22,14333"
 :setvar Q1Host      "26.186.136.11,14333"
 :setvar Q7Host      "26.10.141.36,14333"
-:setvar TDHost      "26.132.58.176,14333"
+:setvar TDHost      "26.143.138.168,14333"
 
 -- Must match the password used when the login was created (site/Central scripts)
 :setvar DistributedPassword "Fashion@123456"
